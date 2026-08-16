@@ -1,380 +1,357 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  User, Droplet, Package, CreditCard, ChevronRight, CheckCircle, 
-  AlertCircle, Plus, Minus, UserPlus, ArrowLeft, History, MapPin, 
-  Edit3, Trash2, BarChart2, Home, Search, X, Download, TrendingUp, 
-  Award, FileText, PhoneCall, Phone
-} from 'lucide-react';
-
-// ----------------------------------------------------------------------
-// Mock Data (ข้อมูลจำลองเบื้องต้น)
-// ----------------------------------------------------------------------
-const INITIAL_CUSTOMERS = [
-  { id: 'c1', name: 'บ้านป้าศรี (ซอย 1)', phone: '0812345678', zone: 'ซอย 1', debt: 45, stockOrange: 2, stockPurple: 0, stockCrate: 1 },
-  { id: 'c2', name: 'ร้านทำผม เจ๊แหม่ม', phone: '', zone: 'ตลาดสด', debt: 0, stockOrange: 5, stockPurple: 2, stockCrate: 0 },
-  { id: 'c3', name: 'ลุงชัย ท้ายซอย', phone: '0998765432', zone: 'ซอย 2', debt: 120, stockOrange: 0, stockPurple: 3, stockCrate: 2 },
-];
-
-const INITIAL_TRANSACTIONS = [
-  {
-    id: 'tx1', customerId: 'c1', customerName: 'บ้านป้าศรี (ซอย 1)', zone: 'ซอย 1', status: 'active', paymentStatus: 'unpaid',
-    timestamp: Date.now() - 86400000, // 1 วันที่แล้ว
-    deliveries: { orange: 3, purple: 0, crate: 0 }, returns: { orange: 1, purple: 0, crate: 0 },
-    totalAmount: 45, amountCollected: 0, addedDebt: 45
-  }
-];
-
-// Helper Functions
-const safeNum = (val) => (isNaN(Number(val)) ? 0 : Number(val));
-
-const formatDate = (ts) => {
-  if (!ts) return '-';
-  try {
-    const d = new Date(ts);
-    if (isNaN(d.getTime())) return '-';
-    const dd = String(d.getDate()).padStart(2, '0');
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const yy = (d.getFullYear() + 543).toString().slice(-2);
-    const hr = String(d.getHours()).padStart(2, '0');
-    const mn = String(d.getMinutes()).padStart(2, '0');
-    return `${dd}/${mm}/${yy} ${hr}:${mn}`;
-  } catch(e) { return '-'; }
-};
-
-// ----------------------------------------------------------------------
-// Main App Component
-// ----------------------------------------------------------------------
-export default function App() {
-  const [customers, setCustomers] = useState(INITIAL_CUSTOMERS);
-  const [transactions, setTransactions] = useState(INITIAL_TRANSACTIONS);
-  
-  // Navigation: 'list', 'addCustomer', 'editCustomer', 'delivery', 'history', 'historyAll', 'reports', 'stats', 'stockList'
-  const [currentView, setCurrentView] = useState('list'); 
-  const [selectedZone, setSelectedZone] = useState('ทั้งหมด');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [reportPeriod, setReportPeriod] = useState('day');
-  const [selectedCustomerId, setSelectedCustomerId] = useState(null);
-  
-  // Form State
-  const [deliveries, setDeliveries] = useState({ orange: 0, purple: 0, crate: 0 });
-  const [returns, setReturns] = useState({ orange: 0, purple: 0, crate: 0 });
-  const [paymentStatus, setPaymentStatus] = useState('paid');
-  
-  const [formName, setFormName] = useState('');
-  const [formPhone, setFormPhone] = useState('');
-  const [formZone, setFormZone] = useState('');
-  
-  const [confirmDialog, setConfirmDialog] = useState(null);
-  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
-
-  const prices = { orange: 15, purple: 15, crate: 30 };
-
-  const showToast = (message, type = 'success') => {
-    setToast({ show: true, message, type });
-    setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3000);
-  };
-
-  // --- Computed Data ---
-  const activeCustomer = useMemo(() => customers.find(c => c.id === selectedCustomerId) || null, [customers, selectedCustomerId]);
-
-  const zones = useMemo(() => {
-    const allZones = customers.map(c => c.zone || 'อื่นๆ');
-    const uniqueZones = [...new Set(allZones)].filter(z => z !== 'อื่นๆ').sort();
-    return ['ทั้งหมด', ...uniqueZones, 'อื่นๆ'];
-  }, [customers]);
-
-  const filteredCustomers = useMemo(() => {
-    let filtered = [...customers].sort((a, b) => a.name.localeCompare(b.name, 'th'));
-    if (selectedZone !== 'ทั้งหมด') filtered = filtered.filter(c => c.zone === selectedZone);
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      filtered = filtered.filter(c => 
-        c.name.toLowerCase().includes(q) || 
-        (c.zone || '').toLowerCase().includes(q) ||
-        (c.phone || '').includes(q)
-      );
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ระบบส่งน้ำดื่ม</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    /* ป้องกันการคลุมดำปุ่มบนมือถือ */
+    button, input, select {
+      -webkit-tap-highlight-color: transparent;
     }
-    return filtered;
-  }, [customers, selectedZone, searchQuery]);
-
-  const sortedTransactions = useMemo(() => [...transactions].sort((a, b) => b.timestamp - a.timestamp), [transactions]);
-
-  const reportStats = useMemo(() => {
-    const d = new Date();
-    let startDate = 0;
-    if (reportPeriod === 'day') startDate = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-    else if (reportPeriod === 'week') { const wd = new Date(d); wd.setDate(d.getDate() - d.getDay()); wd.setHours(0,0,0,0); startDate = wd.getTime(); }
-    else if (reportPeriod === 'month') startDate = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
-    else if (reportPeriod === 'year') startDate = new Date(d.getFullYear(), 0, 1).getTime();
-
-    const txForReport = transactions.filter(t => t.timestamp >= startDate);
-    const validTx = txForReport.filter(t => t.status !== 'voided');
-
-    const stats = validTx.reduce((acc, tx) => {
-      acc.rev += safeNum(tx.amountCollected); 
-      acc.debt += safeNum(tx.addedDebt) > 0 ? safeNum(tx.addedDebt) : 0;
-      acc.dO += safeNum(tx.deliveries?.orange); acc.dP += safeNum(tx.deliveries?.purple); acc.dC += safeNum(tx.deliveries?.crate);
-      acc.rO += safeNum(tx.returns?.orange); acc.rP += safeNum(tx.returns?.purple); acc.rC += safeNum(tx.returns?.crate);
-      return acc;
-    }, { rev: 0, debt: 0, dO: 0, dP: 0, dC: 0, rO: 0, rP: 0, rC: 0 });
-
-    return { txList: txForReport, stats, totalDel: stats.dO + stats.dP + stats.dC };
-  }, [transactions, reportPeriod]);
-
-  const systemStats = useMemo(() => {
-    const totalDebt = customers.reduce((s, c) => s + safeNum(c.debt), 0);
-    const topDebtors = [...customers].filter(c => safeNum(c.debt) > 0).sort((a, b) => safeNum(b.debt) - safeNum(a.debt)).slice(0, 5);
-    return { 
-      totalDebt, topDebtors, 
-      totalOrange: customers.reduce((s, c) => s + safeNum(c.stockOrange), 0),
-      totalPurple: customers.reduce((s, c) => s + safeNum(c.stockPurple), 0),
-      totalCrate: customers.reduce((s, c) => s + safeNum(c.stockCrate), 0) 
-    };
-  }, [customers]);
-
-  const customersWithStock = useMemo(() => {
-    return customers.filter(c => safeNum(c.stockOrange) > 0 || safeNum(c.stockPurple) > 0 || safeNum(c.stockCrate) > 0)
-      .sort((a, b) => {
-        const totalA = safeNum(a.stockOrange) + safeNum(a.stockPurple) + safeNum(a.stockCrate);
-        const totalB = safeNum(b.stockOrange) + safeNum(b.stockPurple) + safeNum(b.stockCrate);
-        return totalB - totalA;
-      });
-  }, [customers]);
-
-  // --- Actions ---
-  const calculateCurrentTotal = () => (safeNum(deliveries.orange) * prices.orange) + (safeNum(deliveries.purple) * prices.purple) + (safeNum(deliveries.crate) * prices.crate);
-  
-  const updateQuantity = (type, item, op) => {
-    const state = type === 'deliver' ? deliveries : returns;
-    const setter = type === 'deliver' ? setDeliveries : setReturns;
-    setter({ ...state, [item]: Math.max(0, safeNum(state[item]) + (op === 'add' ? 1 : -1)) });
-  };
-
-  const goToDelivery = (custId) => {
-    setSelectedCustomerId(custId);
-    setDeliveries({ orange: 0, purple: 0, crate: 0 });
-    setReturns({ orange: 0, purple: 0, crate: 0 });
-    setPaymentStatus('paid');
-    setCurrentView('delivery');
-  };
-
-  const openAddCustomer = () => { setFormName(''); setFormPhone(''); setFormZone(''); setCurrentView('addCustomer'); };
-  
-  const openEditCustomer = () => {
-    if (!activeCustomer) return;
-    setFormName(activeCustomer.name); 
-    setFormPhone(activeCustomer.phone || '');
-    setFormZone(activeCustomer.zone === 'อื่นๆ' ? '' : activeCustomer.zone);
-    setCurrentView('editCustomer');
-  };
-
-  const handleSaveCustomer = (e, isEdit = false) => {
-    e.preventDefault();
-    if (!formName.trim()) return;
-    const finalZone = formZone.trim() || 'อื่นๆ';
-    
-    if (isEdit && activeCustomer) {
-      setCustomers(prev => prev.map(c => c.id === activeCustomer.id ? { ...c, name: formName.trim(), phone: formPhone.trim(), zone: finalZone } : c));
-      showToast('อัปเดตข้อมูลลูกค้าเรียบร้อยแล้ว');
-    } else {
-      const newCustomer = { id: `c_${Date.now()}`, name: formName.trim(), phone: formPhone.trim(), zone: finalZone, debt: 0, stockOrange: 0, stockPurple: 0, stockCrate: 0 };
-      setCustomers(prev => [...prev, newCustomer]);
-      showToast('เพิ่มลูกค้าใหม่เรียบร้อยแล้ว');
+    /* ซ่อน Scrollbar */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
     }
-    setCurrentView('list'); setSelectedZone(finalZone); setSearchQuery('');
-  };
-
-  const handleDeleteCustomer = () => {
-    if (!activeCustomer) return;
-    setConfirmDialog({
-      title: 'ลบลูกค้ารายนี้?', 
-      message: `คุณต้องการลบรายชื่อ "${activeCustomer.name}" ออกจากระบบใช่หรือไม่? (ประวัติการส่งน้ำจะยังคงอยู่)`, 
-      confirmText: 'ลบข้อมูล', 
-      danger: true,
-      onConfirm: () => {
-        setCustomers(prev => prev.filter(c => c.id !== activeCustomer.id));
-        setCurrentView('list');
-        showToast('ลบลูกค้ารายนี้ออกจากระบบแล้ว');
-      }
-    });
-  };
-
-  const handleSubmitDelivery = () => {
-    if (!activeCustomer) return;
-    
-    const currentTotal = calculateCurrentTotal();
-    const currentDebt = safeNum(activeCustomer.debt);
-    let addedDebt = 0, amountCollected = 0, newDebt = currentDebt;
-
-    if (paymentStatus === 'paid') {
-      amountCollected = currentTotal + currentDebt; 
-      addedDebt = -currentDebt; 
-      newDebt = 0;
-    } else {
-      addedDebt = currentTotal; 
-      newDebt = currentDebt + addedDebt;
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
     }
+  </style>
+</head>
+<body class="bg-gray-100 font-sans text-gray-900 min-h-screen relative pb-20 selection:bg-blue-200">
 
-    const calcStock = (old, del, ret) => Math.max(0, safeNum(old) + safeNum(del) - safeNum(ret));
-    const newStockOrange = calcStock(activeCustomer.stockOrange, deliveries.orange, returns.orange);
-    const newStockPurple = calcStock(activeCustomer.stockPurple, deliveries.purple, returns.purple);
-    const newStockCrate = calcStock(activeCustomer.stockCrate, deliveries.crate, returns.crate);
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-full shadow-lg font-bold flex items-center text-white transition-all duration-300 transform -translate-y-20 opacity-0 pointer-events-none">
+    <span id="toast-icon" class="mr-2"></span>
+    <span id="toast-msg"></span>
+  </div>
 
-    setCustomers(prev => prev.map(c => c.id === activeCustomer.id ? {
-      ...c, debt: newDebt, stockOrange: newStockOrange, stockPurple: newStockPurple, stockCrate: newStockCrate
-    } : c));
+  <!-- Container หลักสำหรับสลับ View -->
+  <div id="app-container" class="max-w-md mx-auto min-h-screen relative"></div>
 
-    const newTx = {
-      id: `tx_${Date.now()}`, customerId: activeCustomer.id, customerName: activeCustomer.name, zone: activeCustomer.zone,
-      deliveries: {...deliveries}, returns: {...returns}, paymentStatus, totalAmount: currentTotal, amountCollected, addedDebt, status: 'active', timestamp: Date.now()
-    };
-    setTransactions(prev => [newTx, ...prev]);
+  <!-- Bottom Navigation -->
+  <div id="bottom-nav" class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe pt-2 px-6 shadow-[0_-5px_10px_-5px_rgba(0,0,0,0.05)] max-w-md mx-auto z-40 flex justify-around items-center">
+    <button onclick="switchView('list')" id="nav-list" class="flex flex-col items-center p-2 text-blue-600 transition-colors">
+      <i data-lucide="home" class="w-6 h-6 mb-1"></i>
+      <span class="text-[10px] font-bold">ลูกค้า</span>
+    </button>
+    <button onclick="switchView('historyAll')" id="nav-historyAll" class="flex flex-col items-center p-2 text-gray-400 transition-colors">
+      <i data-lucide="file-text" class="w-6 h-6 mb-1"></i>
+      <span class="text-[10px] font-bold">บิลล่าสุด</span>
+    </button>
+    <button onclick="switchView('reports')" id="nav-reports" class="flex flex-col items-center p-2 text-gray-400 transition-colors">
+      <i data-lucide="bar-chart-2" class="w-6 h-6 mb-1"></i>
+      <span class="text-[10px] font-bold">รายงาน</span>
+    </button>
+    <button onclick="switchView('stats')" id="nav-stats" class="flex flex-col items-center p-2 text-gray-400 transition-colors">
+      <i data-lucide="trending-up" class="w-6 h-6 mb-1"></i>
+      <span class="text-[10px] font-bold">สถิติ</span>
+    </button>
+  </div>
 
-    setCurrentView('list'); setSearchQuery('');
-    showToast(`บันทึกการส่งให้ ${activeCustomer.name} เรียบร้อย!`);
-  };
-
-  const handleVoidTransaction = (tx) => {
-    setConfirmDialog({
-      title: 'ต้องการยกเลิกบิลนี้?', 
-      message: 'สต๊อก ถัง/ลัง และยอดหนี้ของลูกค้าจะถูกดึงกลับไปเหมือนก่อนบันทึกบิลนี้ คุณแน่ใจหรือไม่?', 
-      confirmText: 'ยืนยันยกเลิกบิล', 
-      danger: true,
-      onConfirm: () => {
-        const cust = customers.find(c => c.id === tx.customerId);
-        if (!cust) return showToast("ไม่พบลูกค้ารายนี้ในระบบ", "error");
-
-        const newStockOrange = Math.max(0, safeNum(cust.stockOrange) - safeNum(tx.deliveries?.orange) + safeNum(tx.returns?.orange));
-        const newStockPurple = Math.max(0, safeNum(cust.stockPurple) - safeNum(tx.deliveries?.purple) + safeNum(tx.returns?.purple));
-        const newStockCrate = Math.max(0, safeNum(cust.stockCrate) - safeNum(tx.deliveries?.crate) + safeNum(tx.returns?.crate));
-        const newDebt = Math.max(0, safeNum(cust.debt) - safeNum(tx.addedDebt));
-
-        setCustomers(prev => prev.map(c => c.id === cust.id ? { ...c, debt: newDebt, stockOrange: newStockOrange, stockPurple: newStockPurple, stockCrate: newStockCrate } : c));
-        setTransactions(prev => prev.map(t => t.id === tx.id ? { ...t, status: 'voided' } : t));
-        showToast('ยกเลิกบิลสำเร็จ สต๊อกและหนี้ถูกดึงกลับแล้ว');
-      }
-    });
-  };
-
-  const exportToExcel = (txList) => {
-    if(txList.length === 0) return showToast("ไม่มีข้อมูลในช่วงเวลานี้", "error");
-    const headers = ['วันที่และเวลา', 'ชื่อลูกค้า', 'โซน', 'สถานะบิล', 'การจ่ายเงิน', 'ส่ง(ส้ม)', 'คืน(ส้ม)', 'ส่ง(ม่วง)', 'คืน(ม่วง)', 'ส่ง(ลัง)', 'คืน(ลัง)', 'ยอดเงินสดที่เก็บ(บาท)', 'ค้างจ่ายเพิ่ม(บาท)'];
-    const rows = txList.map(tx => [
-      `"${formatDate(tx.timestamp)}"`, `"${tx.customerName}"`, `"${tx.zone}"`, tx.status === 'voided' ? 'ยกเลิก' : 'ปกติ', tx.paymentStatus === 'paid' ? 'จ่ายแล้ว' : 'ค้างจ่าย',
-      safeNum(tx.deliveries?.orange), safeNum(tx.returns?.orange), safeNum(tx.deliveries?.purple), safeNum(tx.returns?.purple), safeNum(tx.deliveries?.crate), safeNum(tx.returns?.crate), safeNum(tx.amountCollected), safeNum(tx.addedDebt)
-    ].join(','));
-    const blob = new Blob(['\uFEFF' + headers.join(',') + '\n' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a'); link.href = url; link.download = `รายงานส่งน้ำ_${new Date().getTime()}.csv`; link.click(); URL.revokeObjectURL(url);
-    showToast('ดาวน์โหลดไฟล์ Excel เรียบร้อยแล้ว');
-  };
-
-  // ----------------------------------------------------------------------
-  // UI Sub-Components
-  // ----------------------------------------------------------------------
-  
-  const ToastNotification = () => {
-    if (!toast.show) return null;
-    return (
-      <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-full shadow-lg font-bold flex items-center animate-in slide-in-from-top-4 fade-in duration-300 ${toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-600 text-white'}`}>
-        {toast.type === 'error' ? <AlertCircle size={20} className="mr-2"/> : <CheckCircle size={20} className="mr-2"/>}
-        {toast.message}
+  <!-- Modal ยืนยัน -->
+  <div id="confirm-modal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm hidden">
+    <div class="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl">
+      <h3 id="modal-title" class="font-bold text-xl mb-2 text-gray-800"></h3>
+      <p id="modal-msg" class="text-gray-600 mb-6 leading-relaxed text-sm"></p>
+      <div class="flex gap-3">
+        <button onclick="closeModal()" class="flex-1 bg-gray-100 text-gray-700 py-3.5 rounded-xl font-bold active:bg-gray-200 transition-colors">ยกเลิก</button>
+        <button id="modal-confirm-btn" class="flex-1 text-white py-3.5 rounded-xl font-bold active:scale-95 transition-transform bg-blue-600">ยืนยัน</button>
       </div>
-    );
-  };
+    </div>
+  </div>
 
-  const BottomNav = () => {
-    const navItems = [
-      { id: 'list', icon: Home, label: 'ลูกค้า' },
-      { id: 'historyAll', icon: FileText, label: 'บิลล่าสุด' },
-      { id: 'reports', icon: BarChart2, label: 'รายงาน' },
-      { id: 'stats', icon: TrendingUp, label: 'สถิติ' }
+  <script>
+    // --- 1. Initial State & LocalStorage ---
+    const DEFAULT_CUSTOMERS = [
+      { id: 'c1', name: 'บ้านป้าศรี (ซอย 1)', phone: '0812345678', zone: 'ซอย 1', debt: 45, stockOrange: 2, stockPurple: 0, stockCrate: 1 },
+      { id: 'c2', name: 'ร้านทำผม เจ๊แหม่ม', phone: '', zone: 'ตลาดสด', debt: 0, stockOrange: 5, stockPurple: 2, stockCrate: 0 },
+      { id: 'c3', name: 'ลุงชัย ท้ายซอย', phone: '0998765432', zone: 'ซอย 2', debt: 120, stockOrange: 0, stockPurple: 3, stockCrate: 2 },
     ];
 
-    return (
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe pt-2 px-6 shadow-[0_-5px_10px_-5px_rgba(0,0,0,0.05)] max-w-md mx-auto z-40 flex justify-around items-center">
-        {navItems.map(item => {
-          const IconComp = item.icon;
-          return (
-            <button key={item.id} onClick={() => setCurrentView(item.id)} className={`flex flex-col items-center p-2 transition-colors ${currentView === item.id ? 'text-blue-600' : 'text-gray-400'}`}>
-              <IconComp size={24} className="mb-1" strokeWidth={currentView === item.id ? 2.5 : 2} />
-              <span className="text-[10px] font-bold">{item.label}</span>
-            </button>
-          );
-        })}
-      </div>
-    );
-  };
+    const DEFAULT_TRANSACTIONS = [
+      {
+        id: 'tx1', customerId: 'c1', customerName: 'บ้านป้าศรี (ซอย 1)', zone: 'ซอย 1', status: 'active', paymentStatus: 'unpaid',
+        timestamp: Date.now() - 86400000, 
+        deliveries: { orange: 3, purple: 0, crate: 0 }, returns: { orange: 1, purple: 0, crate: 0 },
+        totalAmount: 45, amountCollected: 0, addedDebt: 45
+      }
+    ];
 
-  const TransactionCard = ({ tx, showCustomerName }) => {
-    const dO = safeNum(tx.deliveries?.orange); const dP = safeNum(tx.deliveries?.purple); const dC = safeNum(tx.deliveries?.crate);
-    const rO = safeNum(tx.returns?.orange); const rP = safeNum(tx.returns?.purple); const rC = safeNum(tx.returns?.crate);
+    let customers = JSON.parse(localStorage.getItem('water_app_customers_html')) || DEFAULT_CUSTOMERS;
+    let transactions = JSON.parse(localStorage.getItem('water_app_transactions_html')) || DEFAULT_TRANSACTIONS;
 
-    return (
-      <div className={`p-4 rounded-3xl shadow-sm border transition-all ${tx.status === 'voided' ? 'bg-gray-100 border-gray-200 opacity-60' : 'bg-white border-gray-100'}`}>
-        <div className="flex justify-between items-start mb-3 border-b border-gray-100 pb-3">
-          <div>
-            {showCustomerName && <h4 className="font-bold text-blue-900 mb-1 flex items-center"><User size={14} className="mr-1"/> {tx.customerName}</h4>}
-            <p className="text-sm font-bold text-gray-500 flex items-center"><History size={14} className="mr-1"/> {formatDate(tx.timestamp)}</p>
-            {tx.status === 'voided' ? (
-              <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-md font-bold mt-1 inline-block">ยกเลิกแล้ว</span>
-            ) : (
-              <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold mt-1 inline-block ${tx.paymentStatus === 'paid' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-                {tx.paymentStatus === 'paid' ? 'จ่ายแล้ว' : 'ค้างจ่าย'}
-              </span>
-            )}
-          </div>
-          {tx.status !== 'voided' && (
-            <button onClick={() => handleVoidTransaction(tx)} className="text-red-500 text-xs font-bold flex items-center bg-red-50 px-2.5 py-1.5 rounded-lg active:bg-red-100">
-              <Trash2 size={12} className="mr-1"/> ยกเลิกบิล
-            </button>
-          )}
-        </div>
-        <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
-          <div>
-            <p className="font-semibold text-xs text-gray-400 mb-1">รายการส่ง</p>
-            {dO > 0 && <p className="flex justify-between"><span>ส้ม</span> <span>{dO} ถัง</span></p>}
-            {dP > 0 && <p className="flex justify-between"><span>ม่วง</span> <span>{dP} ถัง</span></p>}
-            {dC > 0 && <p className="flex justify-between"><span>ลัง</span> <span>{dC} ลัง</span></p>}
-            {(dO === 0 && dP === 0 && dC === 0) && <p className="text-gray-400">-</p>}
-          </div>
-          <div>
-            <p className="font-semibold text-xs text-gray-400 mb-1">รับคืน</p>
-            {rO > 0 && <p className="flex justify-between"><span>ส้ม</span> <span>{rO} ถัง</span></p>}
-            {rP > 0 && <p className="flex justify-between"><span>ม่วง</span> <span>{rP} ถัง</span></p>}
-            {rC > 0 && <p className="flex justify-between"><span>ลัง</span> <span>{rC} ลัง</span></p>}
-            {(rO === 0 && rP === 0 && rC === 0) && <p className="text-gray-400">-</p>}
-          </div>
-        </div>
-        <div className="mt-3 pt-3 border-t border-gray-50 flex justify-between items-center font-bold">
-          <span className="text-gray-500 text-sm">ยอดเงิน/หนี้:</span>
-          <span className={safeNum(tx.addedDebt) > 0 ? 'text-red-500' : 'text-blue-600'}>
-            {safeNum(tx.amountCollected) > 0 ? `เก็บเงิน ${safeNum(tx.amountCollected)} ฿` : `ค้างเพิ่ม ${safeNum(tx.addedDebt)} ฿`}
-          </span>
-        </div>
-      </div>
-    );
-  };
+    let currentView = 'list';
+    let selectedZone = 'ทั้งหมด';
+    let searchQuery = '';
+    let reportPeriod = 'day';
+    let selectedCustomerId = null;
 
-  // ----------------------------------------------------------------------
-  // Render View Components
-  // ----------------------------------------------------------------------
-  return (
-    <div className="font-sans antialiased text-gray-900 bg-gray-100 min-h-screen relative pb-20">
-      <ToastNotification />
+    // Delivery Form State
+    let deliveries = { orange: 0, purple: 0, crate: 0 };
+    let returns = { orange: 0, purple: 0, crate: 0 };
+    let paymentStatus = 'paid';
+
+    const prices = { orange: 15, purple: 15, crate: 30 };
+
+    function saveData() {
+      localStorage.setItem('water_app_customers_html', JSON.stringify(customers));
+      localStorage.setItem('water_app_transactions_html', JSON.stringify(transactions));
+    }
+
+    // --- Helpers ---
+    const safeNum = (val) => (isNaN(Number(val)) ? 0 : Number(val));
+
+    const formatDate = (ts) => {
+      if (!ts) return '-';
+      try {
+        const d = new Date(ts);
+        if (isNaN(d.getTime())) return '-';
+        const dd = String(d.getDate()).padStart(2, '0');
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const yy = (d.getFullYear() + 543).toString().slice(-2);
+        const hr = String(d.getHours()).padStart(2, '0');
+        const mn = String(d.getMinutes()).padStart(2, '0');
+        return `${dd}/${mm}/${yy} ${hr}:${mn}`;
+      } catch(e) { return '-'; }
+    };
+
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toast');
+      const toastMsg = document.getElementById('toast-msg');
+      const toastIcon = document.getElementById('toast-icon');
+
+      toastMsg.innerText = message;
+      toast.className = `fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-full shadow-lg font-bold flex items-center text-white transition-all duration-300 transform translate-y-0 opacity-100 ${type === 'error' ? 'bg-red-500' : 'bg-green-600'}`;
+      toastIcon.innerHTML = type === 'error' ? '<i data-lucide="alert-circle"></i>' : '<i data-lucide="check-circle"></i>';
+      lucide.createIcons();
+
+      setTimeout(() => {
+        toast.classList.add('-translate-y-20', 'opacity-0');
+      }, 3000);
+    }
+
+    let confirmCallback = null;
+    function showModal(title, msg, confirmText, danger, onConfirm) {
+      document.getElementById('modal-title').innerText = title;
+      document.getElementById('modal-title').className = `font-bold text-xl mb-2 ${danger ? 'text-red-600' : 'text-gray-800'}`;
+      document.getElementById('modal-msg').innerText = msg;
       
-      {/* --- หน้า 1: รายชื่อลูกค้า --- */}
-      {currentView === 'list' && (
-        <div className="p-4 max-w-md mx-auto">
-          <div className="mb-4 flex justify-between items-end bg-white p-4 rounded-b-3xl shadow-sm -mt-4 -mx-4 pt-6">
-            <div><h1 className="text-2xl font-black text-blue-900 tracking-tight">ระบบส่งน้ำดื่ม</h1><p className="text-sm text-gray-500 font-medium mt-1">{new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}</p></div>
-            <div className="bg-blue-100 text-blue-800 p-3 rounded-2xl"><Droplet size={26} /></div>
+      const btn = document.getElementById('modal-confirm-btn');
+      btn.innerText = confirmText;
+      btn.className = `flex-1 text-white py-3.5 rounded-xl font-bold active:scale-95 transition-transform ${danger ? 'bg-red-500' : 'bg-blue-600'}`;
+      
+      confirmCallback = onConfirm;
+      document.getElementById('confirm-modal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('confirm-modal').classList.add('hidden');
+      confirmCallback = null;
+    }
+
+    document.getElementById('modal-confirm-btn').addEventListener('click', () => {
+      if (confirmCallback) confirmCallback();
+      closeModal();
+    });
+
+    // --- Switch Views ---
+    function switchView(viewName, custId = null) {
+      currentView = viewName;
+      if (custId) selectedCustomerId = custId;
+
+      // ปรับปุ่ม Bottom Nav
+      const navs = ['list', 'historyAll', 'reports', 'stats'];
+      navs.forEach(n => {
+        const btn = document.getElementById(`nav-${n}`);
+        if (btn) {
+          if (n === viewName) {
+            btn.className = "flex flex-col items-center p-2 text-blue-600 transition-colors";
+          } else {
+            btn.className = "flex flex-col items-center p-2 text-gray-400 transition-colors";
+          }
+        }
+      });
+
+      const navContainer = document.getElementById('bottom-nav');
+      if (['addCustomer', 'editCustomer', 'delivery', 'history'].includes(viewName)) {
+        navContainer.classList.add('hidden');
+      } else {
+        navContainer.classList.remove('hidden');
+      }
+
+      render();
+    }
+
+    // --- Main Render Function ---
+    function render() {
+      const container = document.getElementById('app-container');
+      
+      if (currentView === 'list') renderList(container);
+      else if (currentView === 'addCustomer' || currentView === 'editCustomer') renderCustomerForm(container);
+      else if (currentView === 'delivery') renderDelivery(container);
+      else if (currentView === 'history') renderHistory(container);
+      else if (currentView === 'historyAll') renderHistoryAll(container);
+      else if (currentView === 'reports') renderReports(container);
+      else if (currentView === 'stats') renderStats(container);
+      else if (currentView === 'stockList') renderStockList(container);
+
+      lucide.createIcons();
+    }
+
+    // --- View 1: List ---
+    function renderList(container) {
+      const allZones = customers.map(c => c.zone || 'อื่นๆ');
+      const uniqueZones = ['ทั้งหมด', ...[...new Set(allZones)].filter(z => z !== 'อื่นๆ').sort(), 'อื่นๆ'];
+
+      let filtered = [...customers].sort((a, b) => a.name.localeCompare(b.name, 'th'));
+      if (selectedZone !== 'ทั้งหมด') filtered = filtered.filter(c => c.zone === selectedZone);
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        filtered = filtered.filter(c => c.name.toLowerCase().includes(q) || (c.zone || '').toLowerCase().includes(q) || (c.phone || '').includes(q));
+      }
+
+      let zoneButtonsHtml = '';
+      if (!searchQuery && uniqueZones.length > 1) {
+        zoneButtonsHtml = `
+          <div class="flex overflow-x-auto gap-2 mb-4 pb-2 -mx-4 px-4 no-scrollbar">
+            ${uniqueZones.map(z => `
+              <button onclick="selectedZone='${z}'; render();" class="px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap shadow-sm transition-colors ${selectedZone === z ? 'bg-blue-600 text-white' : 'bg-white text-gray-500 border border-gray-200'}">${z}</button>
+            `).join('')}
           </div>
-          
-          <div className="relative mb-4">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Search size={18} className="text-gray-400" /></div>
-            <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="ค้นหาชื่อ, โซน หรือเบอร์โทร..." className="w-full pl-10 pr-10 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm text-sm" />
-            {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400"><X size={16} /></button>}
+        `;
+      }
+
+      let customerListHtml = '';
+      if (filtered.length === 0) {
+        customerListHtml = `<div class="text-center py-10 bg-white rounded-2xl border border-gray-100"><p class="text-gray-500">ไม่มีข้อมูลลูกค้า</p></div>`;
+      } else {
+        customerListHtml = filtered.map(cust => `
+          <div onclick="goToDelivery('${cust.id}')" class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center active:scale-[0.98] transition-transform cursor-pointer relative overflow-hidden">
+            ${safeNum(cust.debt) > 0 ? `<div class="absolute left-0 top-0 bottom-0 w-1 bg-red-500"></div>` : ''}
+            <div class="pl-1">
+              <h3 class="font-bold text-lg text-gray-800 flex items-center">${cust.name}</h3>
+              <div class="flex items-center gap-2 mt-1 flex-wrap">
+                ${(selectedZone === 'ทั้งหมด' || searchQuery) && cust.zone && cust.zone !== 'อื่นๆ' ? `<span class="text-[11px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md flex items-center font-semibold"><i data-lucide="map-pin" class="w-2.5 h-2.5 mr-1"></i> ${cust.zone}</span>` : ''}
+                ${cust.phone ? `<a href="tel:${cust.phone}" onclick="event.stopPropagation()" class="text-[11px] text-green-700 bg-green-50 px-2 py-0.5 rounded-md flex items-center font-semibold border border-green-100"><i data-lucide="phone-call" class="w-2.5 h-2.5 mr-1"></i> โทร</a>` : ''}
+              </div>
+              <div class="flex gap-3 text-xs mt-2 text-gray-500 font-semibold bg-gray-50 px-2 py-1.5 rounded-lg w-fit">
+                <span class="flex items-center"><i data-lucide="droplet" class="w-3.5 h-3.5 text-orange-500 mr-1"></i> ${safeNum(cust.stockOrange)}</span>
+                <span class="flex items-center"><i data-lucide="droplet" class="w-3.5 h-3.5 text-purple-500 mr-1"></i> ${safeNum(cust.stockPurple)}</span>
+                <span class="flex items-center"><i data-lucide="package" class="w-3.5 h-3.5 text-amber-700 mr-1"></i> ${safeNum(cust.stockCrate)}</span>
+              </div>
+            </div>
+            <div class="text-right flex flex-col items-end justify-center">
+              ${safeNum(cust.debt) > 0 ? `<span class="text-red-600 font-bold text-sm bg-red-50 px-2.5 py-1 rounded-lg mb-1 shadow-sm">ค้าง ${safeNum(cust.debt)} ฿</span>` : `<span class="text-green-600 font-bold text-sm bg-green-50 px-2.5 py-1 rounded-lg mb-1">ปกติ</span>`}
+              <i data-lucide="chevron-right" class="w-4 h-4 text-gray-300 mt-1"></i>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      container.innerHTML = `
+        <div class="p-4">
+          <div class="mb-4 flex justify-between items-end bg-white p-4 rounded-b-3xl shadow-sm -mt-4 -mx-4 pt-6">
+            <div>
+              <h1 class="text-2xl font-black text-blue-900 tracking-tight">ระบบส่งน้ำดื่ม</h1>
+              <p class="text-sm text-gray-500 font-medium mt-1">${new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            </div>
+            <div class="bg-blue-100 text-blue-800 p-3 rounded-2xl"><i data-lucide="droplet" class="w-6 h-6"></i></div>
           </div>
 
-          <div className="mb-3 flex justify-between item
+          <div class="relative mb-4">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i data-lucide="search" class="w-4 h-4 text-gray-400"></i></div>
+            <input type="text" id="search-input" value="${searchQuery}" oninput="searchQuery=this.value; render();" placeholder="ค้นหาชื่อ, โซน หรือเบอร์โทร..." class="w-full pl-10 pr-10 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm text-sm" />
+            ${searchQuery ? `<button onclick="searchQuery=''; render();" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400"><i data-lucide="x" class="w-4 h-4"></i></button>` : ''}
+          </div>
+
+          <div class="mb-3 flex justify-between items-center">
+            <h2 className="text-gray-800 font-bold flex items-center text-lg"><i data-lucide="user" class="w-5 h-5 mr-2 text-blue-500"></i> รายชื่อลูกค้า</h2>
+            <button onclick="openAddCustomer()" class="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center active:bg-blue-100"><i data-lucide="user-plus" class="w-4 h-4 mr-1"></i> เพิ่มลูกค้า</button>
+          </div>
+
+          ${zoneButtonsHtml}
+
+          <div class="space-y-3">
+            ${customerListHtml}
+          </div>
+        </div>
+      `;
+    }
+
+    // --- View 2: Add/Edit Customer ---
+    function renderCustomerForm(container) {
+      const isEdit = currentView === 'editCustomer';
+      const activeCust = customers.find(c => c.id === selectedCustomerId);
+      const allZones = customers.map(c => c.zone || 'อื่นๆ');
+      const availableZones = [...new Set(allZones)].filter(z => z !== 'ทั้งหมด' && z !== 'อื่นๆ');
+
+      container.innerHTML = `
+        <div class="p-4">
+          <div class="flex items-center justify-between mb-6 pt-2">
+            <div class="flex items-center">
+              <button onclick="switchView('${isEdit ? 'delivery' : 'list'}')" class="p-2 mr-2 bg-white rounded-full shadow-sm text-gray-600"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+              <h2 class="font-bold text-xl text-gray-800">${isEdit ? 'แก้ไขข้อมูลลูกค้า' : 'เพิ่มลูกค้าใหม่'}</h2>
+            </div>
+            ${isEdit ? `<button onclick="deleteCustomer()" class="p-2 bg-red-50 text-red-600 rounded-full active:bg-red-100"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+          </div>
+
+          <form onsubmit="saveCustomer(event, ${isEdit})" class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+            <div class="mb-4">
+              <label class="block text-gray-700 text-sm font-bold mb-2">ชื่อลูกค้า <span class="text-red-500">*</span></label>
+              <input type="text" id="form-name" value="${isEdit ? activeCust.name : formName}" class="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-lg font-medium" required placeholder="เช่น ป้าศรี ซอย 1" />
+            </div>
+            <div class="mb-4">
+              <label class="block text-gray-700 text-sm font-bold mb-2 flex items-center"><i data-lucide="phone" class="w-3.5 h-3.5 mr-1"></i> เบอร์โทรศัพท์ (ไม่บังคับ)</label>
+              <input type="tel" id="form-phone" value="${isEdit ? (activeCust.phone || '') : formPhone}" class="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-lg font-medium" placeholder="08X-XXX-XXXX" />
+            </div>
+            <div class="mb-6">
+              <label class="block text-gray-700 text-sm font-bold mb-2">โซน / ซอย</label>
+              <input type="text" id="form-zone" value="${isEdit ? (activeCust.zone === 'อื่นๆ' ? '' : activeCust.zone) : formZone}" class="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-lg font-medium" placeholder="พิมพ์ใหม่ หรือเลือกด้านล่าง" />
+              ${availableZones.length > 0 ? `
+                <div class="mt-3">
+                  <p class="text-xs text-gray-400 mb-2 font-medium">กดเลือกโซน:</p>
+                  <div class="flex flex-wrap gap-2">
+                    ${availableZones.map(z => `<button type="button" onclick="document.getElementById('form-zone').value='${z}'" class="px-3 py-1.5 rounded-lg text-sm font-bold border bg-gray-50 text-gray-500 border-gray-200">${z}</button>`).join('')}
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-md active:scale-95 flex justify-center items-center text-lg">บันทึกข้อมูล</button>
+          </form>
+        </div>
+      `;
+    }
+
+    // --- View 3: Delivery ---
+    function renderDelivery(container) {
+      const activeCust = customers.find(c => c.id === selectedCustomerId);
+      if (!activeCust) return;
+
+      const calcTotal = (deliveries.orange * prices.orange) + (deliveries.purple * prices.purple) + (deliveries.crate * prices.crate);
+
+      container.innerHTML = `
+        <div class="pb-32 relative">
+          <div class="bg-white px-4 py-4 shadow-sm sticky top-0 z-10 flex items-center justify-between border-b border-gray-100">
+            <div class="flex items-center">
+              <button onclick="switchView('list')" class="mr-3 p-2 bg-gray-50 rounded-full text-gray-600"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+              <div>
+                <h2 class="font-black text-lg text-gray-800">${activeCust.name}</h2>
+                <div class="flex items-center mt-0.5">
+                  ${safeNum(activeCust.debt) > 0 ? `<span class="text-red-500 text-xs font-bold bg-red-50 px-2 py-0.5 rounded mr-2 border border-red-100">ค้างเก่า: ${safeNum(activeCust.debt)} ฿</span>` : ''}
+                  ${activeCust.phone ? `<a href="tel:${activeCust.phone}" class="text-green-600 text-xs font-bold bg-green-50 px-2 py-0.5 rounded flex items-center"><i data-lucide="phone-call" class="w-2.5 h-2.5 mr-1"></i> โทร</a>` : ''}
+                </div>
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="switchView('editCustomer')" class="p-2 bg-blue-50 text-blue-600 rounded-full"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
+              <button onclick="switchView('history')" class="p-2 bg-orange-50 text-orange-600 rounded-full"><i data-lucide="history" class="w-4 h-4"></i></button>
+            </div>
+          </div>
+
+          <div cla
