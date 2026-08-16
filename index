@@ -1,0 +1,380 @@
+import React, { useState, useMemo } from 'react';
+import { 
+  User, Droplet, Package, CreditCard, ChevronRight, CheckCircle, 
+  AlertCircle, Plus, Minus, UserPlus, ArrowLeft, History, MapPin, 
+  Edit3, Trash2, BarChart2, Home, Search, X, Download, TrendingUp, 
+  Award, FileText, PhoneCall, Phone
+} from 'lucide-react';
+
+// ----------------------------------------------------------------------
+// Mock Data (ข้อมูลจำลองเบื้องต้น)
+// ----------------------------------------------------------------------
+const INITIAL_CUSTOMERS = [
+  { id: 'c1', name: 'บ้านป้าศรี (ซอย 1)', phone: '0812345678', zone: 'ซอย 1', debt: 45, stockOrange: 2, stockPurple: 0, stockCrate: 1 },
+  { id: 'c2', name: 'ร้านทำผม เจ๊แหม่ม', phone: '', zone: 'ตลาดสด', debt: 0, stockOrange: 5, stockPurple: 2, stockCrate: 0 },
+  { id: 'c3', name: 'ลุงชัย ท้ายซอย', phone: '0998765432', zone: 'ซอย 2', debt: 120, stockOrange: 0, stockPurple: 3, stockCrate: 2 },
+];
+
+const INITIAL_TRANSACTIONS = [
+  {
+    id: 'tx1', customerId: 'c1', customerName: 'บ้านป้าศรี (ซอย 1)', zone: 'ซอย 1', status: 'active', paymentStatus: 'unpaid',
+    timestamp: Date.now() - 86400000, // 1 วันที่แล้ว
+    deliveries: { orange: 3, purple: 0, crate: 0 }, returns: { orange: 1, purple: 0, crate: 0 },
+    totalAmount: 45, amountCollected: 0, addedDebt: 45
+  }
+];
+
+// Helper Functions
+const safeNum = (val) => (isNaN(Number(val)) ? 0 : Number(val));
+
+const formatDate = (ts) => {
+  if (!ts) return '-';
+  try {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return '-';
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yy = (d.getFullYear() + 543).toString().slice(-2);
+    const hr = String(d.getHours()).padStart(2, '0');
+    const mn = String(d.getMinutes()).padStart(2, '0');
+    return `${dd}/${mm}/${yy} ${hr}:${mn}`;
+  } catch(e) { return '-'; }
+};
+
+// ----------------------------------------------------------------------
+// Main App Component
+// ----------------------------------------------------------------------
+export default function App() {
+  const [customers, setCustomers] = useState(INITIAL_CUSTOMERS);
+  const [transactions, setTransactions] = useState(INITIAL_TRANSACTIONS);
+  
+  // Navigation: 'list', 'addCustomer', 'editCustomer', 'delivery', 'history', 'historyAll', 'reports', 'stats', 'stockList'
+  const [currentView, setCurrentView] = useState('list'); 
+  const [selectedZone, setSelectedZone] = useState('ทั้งหมด');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [reportPeriod, setReportPeriod] = useState('day');
+  const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+  
+  // Form State
+  const [deliveries, setDeliveries] = useState({ orange: 0, purple: 0, crate: 0 });
+  const [returns, setReturns] = useState({ orange: 0, purple: 0, crate: 0 });
+  const [paymentStatus, setPaymentStatus] = useState('paid');
+  
+  const [formName, setFormName] = useState('');
+  const [formPhone, setFormPhone] = useState('');
+  const [formZone, setFormZone] = useState('');
+  
+  const [confirmDialog, setConfirmDialog] = useState(null);
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+
+  const prices = { orange: 15, purple: 15, crate: 30 };
+
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3000);
+  };
+
+  // --- Computed Data ---
+  const activeCustomer = useMemo(() => customers.find(c => c.id === selectedCustomerId) || null, [customers, selectedCustomerId]);
+
+  const zones = useMemo(() => {
+    const allZones = customers.map(c => c.zone || 'อื่นๆ');
+    const uniqueZones = [...new Set(allZones)].filter(z => z !== 'อื่นๆ').sort();
+    return ['ทั้งหมด', ...uniqueZones, 'อื่นๆ'];
+  }, [customers]);
+
+  const filteredCustomers = useMemo(() => {
+    let filtered = [...customers].sort((a, b) => a.name.localeCompare(b.name, 'th'));
+    if (selectedZone !== 'ทั้งหมด') filtered = filtered.filter(c => c.zone === selectedZone);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(c => 
+        c.name.toLowerCase().includes(q) || 
+        (c.zone || '').toLowerCase().includes(q) ||
+        (c.phone || '').includes(q)
+      );
+    }
+    return filtered;
+  }, [customers, selectedZone, searchQuery]);
+
+  const sortedTransactions = useMemo(() => [...transactions].sort((a, b) => b.timestamp - a.timestamp), [transactions]);
+
+  const reportStats = useMemo(() => {
+    const d = new Date();
+    let startDate = 0;
+    if (reportPeriod === 'day') startDate = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    else if (reportPeriod === 'week') { const wd = new Date(d); wd.setDate(d.getDate() - d.getDay()); wd.setHours(0,0,0,0); startDate = wd.getTime(); }
+    else if (reportPeriod === 'month') startDate = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+    else if (reportPeriod === 'year') startDate = new Date(d.getFullYear(), 0, 1).getTime();
+
+    const txForReport = transactions.filter(t => t.timestamp >= startDate);
+    const validTx = txForReport.filter(t => t.status !== 'voided');
+
+    const stats = validTx.reduce((acc, tx) => {
+      acc.rev += safeNum(tx.amountCollected); 
+      acc.debt += safeNum(tx.addedDebt) > 0 ? safeNum(tx.addedDebt) : 0;
+      acc.dO += safeNum(tx.deliveries?.orange); acc.dP += safeNum(tx.deliveries?.purple); acc.dC += safeNum(tx.deliveries?.crate);
+      acc.rO += safeNum(tx.returns?.orange); acc.rP += safeNum(tx.returns?.purple); acc.rC += safeNum(tx.returns?.crate);
+      return acc;
+    }, { rev: 0, debt: 0, dO: 0, dP: 0, dC: 0, rO: 0, rP: 0, rC: 0 });
+
+    return { txList: txForReport, stats, totalDel: stats.dO + stats.dP + stats.dC };
+  }, [transactions, reportPeriod]);
+
+  const systemStats = useMemo(() => {
+    const totalDebt = customers.reduce((s, c) => s + safeNum(c.debt), 0);
+    const topDebtors = [...customers].filter(c => safeNum(c.debt) > 0).sort((a, b) => safeNum(b.debt) - safeNum(a.debt)).slice(0, 5);
+    return { 
+      totalDebt, topDebtors, 
+      totalOrange: customers.reduce((s, c) => s + safeNum(c.stockOrange), 0),
+      totalPurple: customers.reduce((s, c) => s + safeNum(c.stockPurple), 0),
+      totalCrate: customers.reduce((s, c) => s + safeNum(c.stockCrate), 0) 
+    };
+  }, [customers]);
+
+  const customersWithStock = useMemo(() => {
+    return customers.filter(c => safeNum(c.stockOrange) > 0 || safeNum(c.stockPurple) > 0 || safeNum(c.stockCrate) > 0)
+      .sort((a, b) => {
+        const totalA = safeNum(a.stockOrange) + safeNum(a.stockPurple) + safeNum(a.stockCrate);
+        const totalB = safeNum(b.stockOrange) + safeNum(b.stockPurple) + safeNum(b.stockCrate);
+        return totalB - totalA;
+      });
+  }, [customers]);
+
+  // --- Actions ---
+  const calculateCurrentTotal = () => (safeNum(deliveries.orange) * prices.orange) + (safeNum(deliveries.purple) * prices.purple) + (safeNum(deliveries.crate) * prices.crate);
+  
+  const updateQuantity = (type, item, op) => {
+    const state = type === 'deliver' ? deliveries : returns;
+    const setter = type === 'deliver' ? setDeliveries : setReturns;
+    setter({ ...state, [item]: Math.max(0, safeNum(state[item]) + (op === 'add' ? 1 : -1)) });
+  };
+
+  const goToDelivery = (custId) => {
+    setSelectedCustomerId(custId);
+    setDeliveries({ orange: 0, purple: 0, crate: 0 });
+    setReturns({ orange: 0, purple: 0, crate: 0 });
+    setPaymentStatus('paid');
+    setCurrentView('delivery');
+  };
+
+  const openAddCustomer = () => { setFormName(''); setFormPhone(''); setFormZone(''); setCurrentView('addCustomer'); };
+  
+  const openEditCustomer = () => {
+    if (!activeCustomer) return;
+    setFormName(activeCustomer.name); 
+    setFormPhone(activeCustomer.phone || '');
+    setFormZone(activeCustomer.zone === 'อื่นๆ' ? '' : activeCustomer.zone);
+    setCurrentView('editCustomer');
+  };
+
+  const handleSaveCustomer = (e, isEdit = false) => {
+    e.preventDefault();
+    if (!formName.trim()) return;
+    const finalZone = formZone.trim() || 'อื่นๆ';
+    
+    if (isEdit && activeCustomer) {
+      setCustomers(prev => prev.map(c => c.id === activeCustomer.id ? { ...c, name: formName.trim(), phone: formPhone.trim(), zone: finalZone } : c));
+      showToast('อัปเดตข้อมูลลูกค้าเรียบร้อยแล้ว');
+    } else {
+      const newCustomer = { id: `c_${Date.now()}`, name: formName.trim(), phone: formPhone.trim(), zone: finalZone, debt: 0, stockOrange: 0, stockPurple: 0, stockCrate: 0 };
+      setCustomers(prev => [...prev, newCustomer]);
+      showToast('เพิ่มลูกค้าใหม่เรียบร้อยแล้ว');
+    }
+    setCurrentView('list'); setSelectedZone(finalZone); setSearchQuery('');
+  };
+
+  const handleDeleteCustomer = () => {
+    if (!activeCustomer) return;
+    setConfirmDialog({
+      title: 'ลบลูกค้ารายนี้?', 
+      message: `คุณต้องการลบรายชื่อ "${activeCustomer.name}" ออกจากระบบใช่หรือไม่? (ประวัติการส่งน้ำจะยังคงอยู่)`, 
+      confirmText: 'ลบข้อมูล', 
+      danger: true,
+      onConfirm: () => {
+        setCustomers(prev => prev.filter(c => c.id !== activeCustomer.id));
+        setCurrentView('list');
+        showToast('ลบลูกค้ารายนี้ออกจากระบบแล้ว');
+      }
+    });
+  };
+
+  const handleSubmitDelivery = () => {
+    if (!activeCustomer) return;
+    
+    const currentTotal = calculateCurrentTotal();
+    const currentDebt = safeNum(activeCustomer.debt);
+    let addedDebt = 0, amountCollected = 0, newDebt = currentDebt;
+
+    if (paymentStatus === 'paid') {
+      amountCollected = currentTotal + currentDebt; 
+      addedDebt = -currentDebt; 
+      newDebt = 0;
+    } else {
+      addedDebt = currentTotal; 
+      newDebt = currentDebt + addedDebt;
+    }
+
+    const calcStock = (old, del, ret) => Math.max(0, safeNum(old) + safeNum(del) - safeNum(ret));
+    const newStockOrange = calcStock(activeCustomer.stockOrange, deliveries.orange, returns.orange);
+    const newStockPurple = calcStock(activeCustomer.stockPurple, deliveries.purple, returns.purple);
+    const newStockCrate = calcStock(activeCustomer.stockCrate, deliveries.crate, returns.crate);
+
+    setCustomers(prev => prev.map(c => c.id === activeCustomer.id ? {
+      ...c, debt: newDebt, stockOrange: newStockOrange, stockPurple: newStockPurple, stockCrate: newStockCrate
+    } : c));
+
+    const newTx = {
+      id: `tx_${Date.now()}`, customerId: activeCustomer.id, customerName: activeCustomer.name, zone: activeCustomer.zone,
+      deliveries: {...deliveries}, returns: {...returns}, paymentStatus, totalAmount: currentTotal, amountCollected, addedDebt, status: 'active', timestamp: Date.now()
+    };
+    setTransactions(prev => [newTx, ...prev]);
+
+    setCurrentView('list'); setSearchQuery('');
+    showToast(`บันทึกการส่งให้ ${activeCustomer.name} เรียบร้อย!`);
+  };
+
+  const handleVoidTransaction = (tx) => {
+    setConfirmDialog({
+      title: 'ต้องการยกเลิกบิลนี้?', 
+      message: 'สต๊อก ถัง/ลัง และยอดหนี้ของลูกค้าจะถูกดึงกลับไปเหมือนก่อนบันทึกบิลนี้ คุณแน่ใจหรือไม่?', 
+      confirmText: 'ยืนยันยกเลิกบิล', 
+      danger: true,
+      onConfirm: () => {
+        const cust = customers.find(c => c.id === tx.customerId);
+        if (!cust) return showToast("ไม่พบลูกค้ารายนี้ในระบบ", "error");
+
+        const newStockOrange = Math.max(0, safeNum(cust.stockOrange) - safeNum(tx.deliveries?.orange) + safeNum(tx.returns?.orange));
+        const newStockPurple = Math.max(0, safeNum(cust.stockPurple) - safeNum(tx.deliveries?.purple) + safeNum(tx.returns?.purple));
+        const newStockCrate = Math.max(0, safeNum(cust.stockCrate) - safeNum(tx.deliveries?.crate) + safeNum(tx.returns?.crate));
+        const newDebt = Math.max(0, safeNum(cust.debt) - safeNum(tx.addedDebt));
+
+        setCustomers(prev => prev.map(c => c.id === cust.id ? { ...c, debt: newDebt, stockOrange: newStockOrange, stockPurple: newStockPurple, stockCrate: newStockCrate } : c));
+        setTransactions(prev => prev.map(t => t.id === tx.id ? { ...t, status: 'voided' } : t));
+        showToast('ยกเลิกบิลสำเร็จ สต๊อกและหนี้ถูกดึงกลับแล้ว');
+      }
+    });
+  };
+
+  const exportToExcel = (txList) => {
+    if(txList.length === 0) return showToast("ไม่มีข้อมูลในช่วงเวลานี้", "error");
+    const headers = ['วันที่และเวลา', 'ชื่อลูกค้า', 'โซน', 'สถานะบิล', 'การจ่ายเงิน', 'ส่ง(ส้ม)', 'คืน(ส้ม)', 'ส่ง(ม่วง)', 'คืน(ม่วง)', 'ส่ง(ลัง)', 'คืน(ลัง)', 'ยอดเงินสดที่เก็บ(บาท)', 'ค้างจ่ายเพิ่ม(บาท)'];
+    const rows = txList.map(tx => [
+      `"${formatDate(tx.timestamp)}"`, `"${tx.customerName}"`, `"${tx.zone}"`, tx.status === 'voided' ? 'ยกเลิก' : 'ปกติ', tx.paymentStatus === 'paid' ? 'จ่ายแล้ว' : 'ค้างจ่าย',
+      safeNum(tx.deliveries?.orange), safeNum(tx.returns?.orange), safeNum(tx.deliveries?.purple), safeNum(tx.returns?.purple), safeNum(tx.deliveries?.crate), safeNum(tx.returns?.crate), safeNum(tx.amountCollected), safeNum(tx.addedDebt)
+    ].join(','));
+    const blob = new Blob(['\uFEFF' + headers.join(',') + '\n' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a'); link.href = url; link.download = `รายงานส่งน้ำ_${new Date().getTime()}.csv`; link.click(); URL.revokeObjectURL(url);
+    showToast('ดาวน์โหลดไฟล์ Excel เรียบร้อยแล้ว');
+  };
+
+  // ----------------------------------------------------------------------
+  // UI Sub-Components
+  // ----------------------------------------------------------------------
+  
+  const ToastNotification = () => {
+    if (!toast.show) return null;
+    return (
+      <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-full shadow-lg font-bold flex items-center animate-in slide-in-from-top-4 fade-in duration-300 ${toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-600 text-white'}`}>
+        {toast.type === 'error' ? <AlertCircle size={20} className="mr-2"/> : <CheckCircle size={20} className="mr-2"/>}
+        {toast.message}
+      </div>
+    );
+  };
+
+  const BottomNav = () => {
+    const navItems = [
+      { id: 'list', icon: Home, label: 'ลูกค้า' },
+      { id: 'historyAll', icon: FileText, label: 'บิลล่าสุด' },
+      { id: 'reports', icon: BarChart2, label: 'รายงาน' },
+      { id: 'stats', icon: TrendingUp, label: 'สถิติ' }
+    ];
+
+    return (
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe pt-2 px-6 shadow-[0_-5px_10px_-5px_rgba(0,0,0,0.05)] max-w-md mx-auto z-40 flex justify-around items-center">
+        {navItems.map(item => {
+          const IconComp = item.icon;
+          return (
+            <button key={item.id} onClick={() => setCurrentView(item.id)} className={`flex flex-col items-center p-2 transition-colors ${currentView === item.id ? 'text-blue-600' : 'text-gray-400'}`}>
+              <IconComp size={24} className="mb-1" strokeWidth={currentView === item.id ? 2.5 : 2} />
+              <span className="text-[10px] font-bold">{item.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const TransactionCard = ({ tx, showCustomerName }) => {
+    const dO = safeNum(tx.deliveries?.orange); const dP = safeNum(tx.deliveries?.purple); const dC = safeNum(tx.deliveries?.crate);
+    const rO = safeNum(tx.returns?.orange); const rP = safeNum(tx.returns?.purple); const rC = safeNum(tx.returns?.crate);
+
+    return (
+      <div className={`p-4 rounded-3xl shadow-sm border transition-all ${tx.status === 'voided' ? 'bg-gray-100 border-gray-200 opacity-60' : 'bg-white border-gray-100'}`}>
+        <div className="flex justify-between items-start mb-3 border-b border-gray-100 pb-3">
+          <div>
+            {showCustomerName && <h4 className="font-bold text-blue-900 mb-1 flex items-center"><User size={14} className="mr-1"/> {tx.customerName}</h4>}
+            <p className="text-sm font-bold text-gray-500 flex items-center"><History size={14} className="mr-1"/> {formatDate(tx.timestamp)}</p>
+            {tx.status === 'voided' ? (
+              <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-md font-bold mt-1 inline-block">ยกเลิกแล้ว</span>
+            ) : (
+              <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold mt-1 inline-block ${tx.paymentStatus === 'paid' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                {tx.paymentStatus === 'paid' ? 'จ่ายแล้ว' : 'ค้างจ่าย'}
+              </span>
+            )}
+          </div>
+          {tx.status !== 'voided' && (
+            <button onClick={() => handleVoidTransaction(tx)} className="text-red-500 text-xs font-bold flex items-center bg-red-50 px-2.5 py-1.5 rounded-lg active:bg-red-100">
+              <Trash2 size={12} className="mr-1"/> ยกเลิกบิล
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
+          <div>
+            <p className="font-semibold text-xs text-gray-400 mb-1">รายการส่ง</p>
+            {dO > 0 && <p className="flex justify-between"><span>ส้ม</span> <span>{dO} ถัง</span></p>}
+            {dP > 0 && <p className="flex justify-between"><span>ม่วง</span> <span>{dP} ถัง</span></p>}
+            {dC > 0 && <p className="flex justify-between"><span>ลัง</span> <span>{dC} ลัง</span></p>}
+            {(dO === 0 && dP === 0 && dC === 0) && <p className="text-gray-400">-</p>}
+          </div>
+          <div>
+            <p className="font-semibold text-xs text-gray-400 mb-1">รับคืน</p>
+            {rO > 0 && <p className="flex justify-between"><span>ส้ม</span> <span>{rO} ถัง</span></p>}
+            {rP > 0 && <p className="flex justify-between"><span>ม่วง</span> <span>{rP} ถัง</span></p>}
+            {rC > 0 && <p className="flex justify-between"><span>ลัง</span> <span>{rC} ลัง</span></p>}
+            {(rO === 0 && rP === 0 && rC === 0) && <p className="text-gray-400">-</p>}
+          </div>
+        </div>
+        <div className="mt-3 pt-3 border-t border-gray-50 flex justify-between items-center font-bold">
+          <span className="text-gray-500 text-sm">ยอดเงิน/หนี้:</span>
+          <span className={safeNum(tx.addedDebt) > 0 ? 'text-red-500' : 'text-blue-600'}>
+            {safeNum(tx.amountCollected) > 0 ? `เก็บเงิน ${safeNum(tx.amountCollected)} ฿` : `ค้างเพิ่ม ${safeNum(tx.addedDebt)} ฿`}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
+  // ----------------------------------------------------------------------
+  // Render View Components
+  // ----------------------------------------------------------------------
+  return (
+    <div className="font-sans antialiased text-gray-900 bg-gray-100 min-h-screen relative pb-20">
+      <ToastNotification />
+      
+      {/* --- หน้า 1: รายชื่อลูกค้า --- */}
+      {currentView === 'list' && (
+        <div className="p-4 max-w-md mx-auto">
+          <div className="mb-4 flex justify-between items-end bg-white p-4 rounded-b-3xl shadow-sm -mt-4 -mx-4 pt-6">
+            <div><h1 className="text-2xl font-black text-blue-900 tracking-tight">ระบบส่งน้ำดื่ม</h1><p className="text-sm text-gray-500 font-medium mt-1">{new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}</p></div>
+            <div className="bg-blue-100 text-blue-800 p-3 rounded-2xl"><Droplet size={26} /></div>
+          </div>
+          
+          <div className="relative mb-4">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Search size={18} className="text-gray-400" /></div>
+            <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="ค้นหาชื่อ, โซน หรือเบอร์โทร..." className="w-full pl-10 pr-10 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm text-sm" />
+            {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400"><X size={16} /></button>}
+          </div>
+
+          <div className="mb-3 flex justify-between item
