@@ -9,11 +9,9 @@
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <style>
-    /* ป้องกันการคลุมดำปุ่มบนมือถือ */
     button, input, select {
       -webkit-tap-highlight-color: transparent;
     }
-    /* ซ่อน Scrollbar */
     .no-scrollbar::-webkit-scrollbar {
       display: none;
     }
@@ -21,14 +19,19 @@
       -ms-overflow-style: none;
       scrollbar-width: none;
     }
+    #toast {
+      transform: translate(-50%, -120px);
+      opacity: 0;
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease;
+    }
   </style>
 </head>
 <body class="bg-gray-100 font-sans text-gray-900 min-h-screen relative pb-20 selection:bg-blue-200">
 
-  <!-- Toast Notification -->
-  <div id="toast" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-full shadow-lg font-bold flex items-center text-white transition-all duration-300 transform -translate-y-20 opacity-0 pointer-events-none">
-    <span id="toast-icon" class="mr-2"></span>
-    <span id="toast-msg"></span>
+  <!-- Toast Notification (แถบแจ้งเตือนแบบซ่อนอัตโนมัติ) -->
+  <div id="toast" class="fixed top-4 left-1/2 z-50 px-6 py-3 rounded-full shadow-2xl font-bold flex items-center text-white pointer-events-none">
+    <span id="toast-icon" class="mr-2 flex items-center"></span>
+    <span id="toast-msg" class="text-sm"></span>
   </div>
 
   <!-- Container หลักสำหรับสลับ View -->
@@ -92,10 +95,13 @@
     let reportPeriod = 'day';
     let selectedCustomerId = null;
 
-    // Delivery Form State
     let deliveries = { orange: 0, purple: 0, crate: 0 };
     let returns = { orange: 0, purple: 0, crate: 0 };
     let paymentStatus = 'paid';
+
+    let formName = '';
+    let formPhone = '';
+    let formZone = '';
 
     const prices = { orange: 15, purple: 15, crate: 30 };
 
@@ -104,7 +110,6 @@
       localStorage.setItem('water_app_transactions_html', JSON.stringify(transactions));
     }
 
-    // --- Helpers ---
     const safeNum = (val) => (isNaN(Number(val)) ? 0 : Number(val));
 
     const formatDate = (ts) => {
@@ -121,19 +126,29 @@
       } catch(e) { return '-'; }
     };
 
+    // --- Toast ระบบจัดการแบบเสถียร ---
+    let toastTimer = null;
     function showToast(message, type = 'success') {
       const toast = document.getElementById('toast');
       const toastMsg = document.getElementById('toast-msg');
       const toastIcon = document.getElementById('toast-icon');
 
+      if (toastTimer) clearTimeout(toastTimer);
+
       toastMsg.innerText = message;
-      toast.className = `fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-full shadow-lg font-bold flex items-center text-white transition-all duration-300 transform translate-y-0 opacity-100 ${type === 'error' ? 'bg-red-500' : 'bg-green-600'}`;
-      toastIcon.innerHTML = type === 'error' ? '<i data-lucide="alert-circle"></i>' : '<i data-lucide="check-circle"></i>';
+      toast.className = `fixed top-4 left-1/2 z-50 px-6 py-3 rounded-full shadow-2xl font-bold flex items-center text-white pointer-events-none ${type === 'error' ? 'bg-red-500' : 'bg-green-600'}`;
+      toastIcon.innerHTML = type === 'error' ? '<i data-lucide="alert-circle" class="w-5 h-5"></i>' : '<i data-lucide="check-circle" class="w-5 h-5"></i>';
       lucide.createIcons();
 
-      setTimeout(() => {
-        toast.classList.add('-translate-y-20', 'opacity-0');
-      }, 3000);
+      // สไลด์ลงมาแสดง
+      toast.style.transform = 'translate(-50%, 0)';
+      toast.style.opacity = '1';
+
+      // เลื่อนเก็บขึ้นด้านบนอัตโนมัติ
+      toastTimer = setTimeout(() => {
+        toast.style.transform = 'translate(-50%, -120px)';
+        toast.style.opacity = '0';
+      }, 2500);
     }
 
     let confirmCallback = null;
@@ -160,12 +175,10 @@
       closeModal();
     });
 
-    // --- Switch Views ---
     function switchView(viewName, custId = null) {
       currentView = viewName;
       if (custId) selectedCustomerId = custId;
 
-      // ปรับปุ่ม Bottom Nav
       const navs = ['list', 'historyAll', 'reports', 'stats'];
       navs.forEach(n => {
         const btn = document.getElementById(`nav-${n}`);
@@ -179,7 +192,7 @@
       });
 
       const navContainer = document.getElementById('bottom-nav');
-      if (['addCustomer', 'editCustomer', 'delivery', 'history'].includes(viewName)) {
+      if (['addCustomer', 'editCustomer', 'delivery', 'history', 'stockList'].includes(viewName)) {
         navContainer.classList.add('hidden');
       } else {
         navContainer.classList.remove('hidden');
@@ -188,7 +201,6 @@
       render();
     }
 
-    // --- Main Render Function ---
     function render() {
       const container = document.getElementById('app-container');
       
@@ -204,7 +216,7 @@
       lucide.createIcons();
     }
 
-    // --- View 1: List ---
+    // --- View: รายชื่อลูกค้า ---
     function renderList(container) {
       const allZones = customers.map(c => c.zone || 'อื่นๆ');
       const uniqueZones = ['ทั้งหมด', ...[...new Set(allZones)].filter(z => z !== 'อื่นๆ').sort(), 'อื่นๆ'];
@@ -271,7 +283,7 @@
           </div>
 
           <div class="mb-3 flex justify-between items-center">
-            <h2 className="text-gray-800 font-bold flex items-center text-lg"><i data-lucide="user" class="w-5 h-5 mr-2 text-blue-500"></i> รายชื่อลูกค้า</h2>
+            <h2 class="text-gray-800 font-bold flex items-center text-lg"><i data-lucide="user" class="w-5 h-5 mr-2 text-blue-500"></i> รายชื่อลูกค้า</h2>
             <button onclick="openAddCustomer()" class="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center active:bg-blue-100"><i data-lucide="user-plus" class="w-4 h-4 mr-1"></i> เพิ่มลูกค้า</button>
           </div>
 
@@ -284,7 +296,7 @@
       `;
     }
 
-    // --- View 2: Add/Edit Customer ---
+    // --- View: ฟอร์มเพิ่ม/แก้ไขลูกค้า ---
     function renderCustomerForm(container) {
       const isEdit = currentView === 'editCustomer';
       const activeCust = customers.find(c => c.id === selectedCustomerId);
@@ -295,7 +307,7 @@
         <div class="p-4">
           <div class="flex items-center justify-between mb-6 pt-2">
             <div class="flex items-center">
-              <button onclick="switchView('${isEdit ? 'delivery' : 'list'}')" class="p-2 mr-2 bg-white rounded-full shadow-sm text-gray-600"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+              <button onclick="switchView('${isEdit ? 'delivery' : 'list'}')" class="p-2 mr-2 bg-white rounded-full shadow-sm text-gray-600 active:bg-gray-100"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
               <h2 class="font-bold text-xl text-gray-800">${isEdit ? 'แก้ไขข้อมูลลูกค้า' : 'เพิ่มลูกค้าใหม่'}</h2>
             </div>
             ${isEdit ? `<button onclick="deleteCustomer()" class="p-2 bg-red-50 text-red-600 rounded-full active:bg-red-100"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
@@ -328,7 +340,7 @@
       `;
     }
 
-    // --- View 3: Delivery ---
+    // --- View: บันทึกการส่งน้ำ ---
     function renderDelivery(container) {
       const activeCust = customers.find(c => c.id === selectedCustomerId);
       if (!activeCust) return;
@@ -355,7 +367,6 @@
           </div>
 
           <div class="p-4 space-y-4">
-            <!-- ส่งใหม่ -->
             <div class="bg-white rounded-3xl shadow-sm p-4 border border-blue-50 relative overflow-hidden">
               <div class="absolute top-0 left-0 w-1.5 h-full bg-blue-500"></div>
               <h3 class="font-bold text-blue-800 mb-2 flex items-center"><i data-lucide="droplet" class="w-4 h-4 mr-2"></i> ส่งใหม่ (ขาย)</h3>
@@ -376,7 +387,6 @@
               `).join('')}
             </div>
 
-            <!-- รับคืน -->
             <div class="bg-white rounded-3xl shadow-sm p-4 border border-gray-100 relative overflow-hidden">
               <div class="absolute top-0 left-0 w-1.5 h-full bg-gray-300"></div>
               <h3 class="font-bold text-gray-700 mb-2 flex items-center"><i data-lucide="check-circle" class="w-4 h-4 mr-2"></i> รับ ถัง/ลัง คืน</h3>
@@ -409,7 +419,6 @@
               }).join('')}
             </div>
 
-            <!-- การจ่ายเงิน -->
             <div class="bg-white rounded-3xl shadow-sm p-4 border border-gray-100">
               <h3 class="font-bold text-gray-800 mb-3 flex items-center"><i data-lucide="credit-card" class="w-4 h-4 mr-2 text-blue-500"></i> สถานะเก็บเงิน</h3>
               <div class="flex gap-3">
@@ -435,7 +444,7 @@
       `;
     }
 
-    // --- View 4: History Customer ---
+    // --- View: ประวัติลูกค้า ---
     function renderHistory(container) {
       const activeCust = customers.find(c => c.id === selectedCustomerId);
       const custTx = transactions.filter(t => t.customerId === selectedCustomerId).sort((a,b) => b.timestamp - a.timestamp);
@@ -453,7 +462,7 @@
       `;
     }
 
-    // --- View 5: History All ---
+    // --- View: บิลทั้งหมด ---
     function renderHistoryAll(container) {
       const sortedTx = [...transactions].sort((a,b) => b.timestamp - a.timestamp).slice(0, 50);
 
@@ -469,7 +478,7 @@
       `;
     }
 
-    // --- View 6: Reports ---
+    // --- View: รายงาน ---
     function renderReports(container) {
       const d = new Date();
       let startDate = 0;
@@ -535,7 +544,7 @@
       `;
     }
 
-    // --- View 7: Stats ---
+    // --- View: สถิติ ---
     function renderStats(container) {
       const totalDebt = customers.reduce((s, c) => s + safeNum(c.debt), 0);
       const topDebtors = [...customers].filter(c => safeNum(c.debt) > 0).sort((a, b) => safeNum(b.debt) - safeNum(a.debt)).slice(0, 5);
@@ -549,7 +558,7 @@
             <div><h1 class="text-2xl font-black tracking-tight flex items-center"><i data-lucide="trending-up" class="w-6 h-6 mr-2"></i> สถิติระบบ</h1></div>
           </div>
           <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-4 flex items-center justify-between">
-            <div><span className="text-gray-500 text-sm font-bold flex items-center mb-1"><i data-lucide="credit-card" class="w-4 h-4 mr-1 text-red-500"></i> หนี้สะสมในตลาดรวม</span><span class="text-3xl font-black text-red-600">${totalDebt.toLocaleString()} <span class="text-base font-bold">บาท</span></span></div>
+            <div><span class="text-gray-500 text-sm font-bold flex items-center mb-1"><i data-lucide="credit-card" class="w-4 h-4 mr-1 text-red-500"></i> หนี้สะสมในตลาดรวม</span><span class="text-3xl font-black text-red-600">${totalDebt.toLocaleString()} <span class="text-base font-bold">บาท</span></span></div>
           </div>
           <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-4">
             <h3 class="font-bold text-gray-800 mb-4 flex items-center"><i data-lucide="alert-circle" class="w-4.5 h-4.5 mr-2 text-indigo-500"></i> 5 อันดับลูกค้าค้างจ่ายสูงสุด</h3>
@@ -577,7 +586,7 @@
       `;
     }
 
-    // --- View 8: Stock List ---
+    // --- View: รายละเอียดสต๊อกรายบ้าน ---
     function renderStockList(container) {
       const customersWithStock = customers.filter(c => safeNum(c.stockOrange) > 0 || safeNum(c.stockPurple) > 0 || safeNum(c.stockCrate) > 0)
         .sort((a, b) => (safeNum(b.stockOrange)+safeNum(b.stockPurple)+safeNum(b.stockCrate)) - (safeNum(a.stockOrange)+safeNum(a.stockPurple)+safeNum(a.stockCrate)));
@@ -607,7 +616,7 @@
       `;
     }
 
-    // Card Helper
+    // --- Card บิล ---
     function renderTxCardHtml(tx, showCustomerName) {
       const dO = safeNum(tx.deliveries?.orange); const dP = safeNum(tx.deliveries?.purple); const dC = safeNum(tx.deliveries?.crate);
       const rO = safeNum(tx.returns?.orange); const rP = safeNum(tx.returns?.purple); const rC = safeNum(tx.returns?.crate);
