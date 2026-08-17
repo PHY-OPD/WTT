@@ -6,7 +6,7 @@
   <title>ระบบส่งน้ำดื่ม</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Lucide Icons -->
+  <!-- Lucide Icons CDN -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <style>
     button, input, select {
@@ -20,7 +20,7 @@
       scrollbar-width: none;
     }
     #toast {
-      transform: translate(-50%, -120px);
+      transform: translate(-50%, -150px);
       opacity: 0;
       transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease;
     }
@@ -28,13 +28,13 @@
 </head>
 <body class="bg-gray-100 font-sans text-gray-900 min-h-screen relative pb-20 selection:bg-blue-200">
 
-  <!-- Toast Notification (แถบแจ้งเตือนแบบซ่อนอัตโนมัติ) -->
+  <!-- Toast Notification (กล่องแจ้งเตือนซ่อนอัตโนมัติ ไม่บังจอ) -->
   <div id="toast" class="fixed top-4 left-1/2 z-50 px-6 py-3 rounded-full shadow-2xl font-bold flex items-center text-white pointer-events-none">
     <span id="toast-icon" class="mr-2 flex items-center"></span>
     <span id="toast-msg" class="text-sm"></span>
   </div>
 
-  <!-- Container หลักสำหรับสลับ View -->
+  <!-- App Container -->
   <div id="app-container" class="max-w-md mx-auto min-h-screen relative"></div>
 
   <!-- Bottom Navigation -->
@@ -57,7 +57,7 @@
     </button>
   </div>
 
-  <!-- Modal ยืนยัน -->
+  <!-- Modal Confirmation -->
   <div id="confirm-modal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm hidden">
     <div class="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl">
       <h3 id="modal-title" class="font-bold text-xl mb-2 text-gray-800"></h3>
@@ -70,7 +70,6 @@
   </div>
 
   <script>
-    // --- 1. Initial State & LocalStorage ---
     const DEFAULT_CUSTOMERS = [
       { id: 'c1', name: 'บ้านป้าศรี (ซอย 1)', phone: '0812345678', zone: 'ซอย 1', debt: 45, stockOrange: 2, stockPurple: 0, stockCrate: 1 },
       { id: 'c2', name: 'ร้านทำผม เจ๊แหม่ม', phone: '', zone: 'ตลาดสด', debt: 0, stockOrange: 5, stockPurple: 2, stockCrate: 0 },
@@ -126,7 +125,6 @@
       } catch(e) { return '-'; }
     };
 
-    // --- Toast ระบบจัดการแบบเสถียร ---
     let toastTimer = null;
     function showToast(message, type = 'success') {
       const toast = document.getElementById('toast');
@@ -140,13 +138,11 @@
       toastIcon.innerHTML = type === 'error' ? '<i data-lucide="alert-circle" class="w-5 h-5"></i>' : '<i data-lucide="check-circle" class="w-5 h-5"></i>';
       lucide.createIcons();
 
-      // สไลด์ลงมาแสดง
       toast.style.transform = 'translate(-50%, 0)';
       toast.style.opacity = '1';
 
-      // เลื่อนเก็บขึ้นด้านบนอัตโนมัติ
       toastTimer = setTimeout(() => {
-        toast.style.transform = 'translate(-50%, -120px)';
+        toast.style.transform = 'translate(-50%, -150px)';
         toast.style.opacity = '0';
       }, 2500);
     }
@@ -183,11 +179,9 @@
       navs.forEach(n => {
         const btn = document.getElementById(`nav-${n}`);
         if (btn) {
-          if (n === viewName) {
-            btn.className = "flex flex-col items-center p-2 text-blue-600 transition-colors";
-          } else {
-            btn.className = "flex flex-col items-center p-2 text-gray-400 transition-colors";
-          }
+          btn.className = (n === viewName)
+            ? "flex flex-col items-center p-2 text-blue-600 transition-colors"
+            : "flex flex-col items-center p-2 text-gray-400 transition-colors";
         }
       });
 
@@ -216,7 +210,6 @@
       lucide.createIcons();
     }
 
-    // --- View: รายชื่อลูกค้า ---
     function renderList(container) {
       const allZones = customers.map(c => c.zone || 'อื่นๆ');
       const uniqueZones = ['ทั้งหมด', ...[...new Set(allZones)].filter(z => z !== 'อื่นๆ').sort(), 'อื่นๆ'];
@@ -296,7 +289,6 @@
       `;
     }
 
-    // --- View: ฟอร์มเพิ่ม/แก้ไขลูกค้า ---
     function renderCustomerForm(container) {
       const isEdit = currentView === 'editCustomer';
       const activeCust = customers.find(c => c.id === selectedCustomerId);
@@ -329,7 +321,7 @@
                 <div class="mt-3">
                   <p class="text-xs text-gray-400 mb-2 font-medium">กดเลือกโซน:</p>
                   <div class="flex flex-wrap gap-2">
-                    ${availableZones.map(z => `<button type="button" onclick="document.getElementById('form-zone').value='${z}'" class="px-3 py-1.5 rounded-lg text-sm font-bold border bg-gray-50 text-gray-500 border-gray-200">${z}</button>`).join('')}
+                    ${availableZones.map(z => `<button type="button" onclick="document.getElementById('form-zone').value='${z}'" class="px-3 py-1.5 rounded-lg text-sm font-bold border bg-gray-50 text-gray-500 border-gray-200 active:bg-gray-100">${z}</button>`).join('')}
                   </div>
                 </div>
               ` : ''}
@@ -340,7 +332,6 @@
       `;
     }
 
-    // --- View: บันทึกการส่งน้ำ ---
     function renderDelivery(container) {
       const activeCust = customers.find(c => c.id === selectedCustomerId);
       if (!activeCust) return;
@@ -351,7 +342,7 @@
         <div class="pb-32 relative">
           <div class="bg-white px-4 py-4 shadow-sm sticky top-0 z-10 flex items-center justify-between border-b border-gray-100">
             <div class="flex items-center">
-              <button onclick="switchView('list')" class="mr-3 p-2 bg-gray-50 rounded-full text-gray-600"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+              <button onclick="switchView('list')" class="mr-3 p-2 bg-gray-50 rounded-full text-gray-600 active:bg-gray-200"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
               <div>
                 <h2 class="font-black text-lg text-gray-800">${activeCust.name}</h2>
                 <div class="flex items-center mt-0.5">
@@ -361,8 +352,8 @@
               </div>
             </div>
             <div class="flex gap-2">
-              <button onclick="switchView('editCustomer')" class="p-2 bg-blue-50 text-blue-600 rounded-full"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
-              <button onclick="switchView('history')" class="p-2 bg-orange-50 text-orange-600 rounded-full"><i data-lucide="history" class="w-4 h-4"></i></button>
+              <button onclick="switchView('editCustomer')" class="p-2 bg-blue-50 text-blue-600 rounded-full active:bg-blue-100"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
+              <button onclick="switchView('history')" class="p-2 bg-orange-50 text-orange-600 rounded-full active:bg-orange-100"><i data-lucide="history" class="w-4 h-4"></i></button>
             </div>
           </div>
 
@@ -444,7 +435,6 @@
       `;
     }
 
-    // --- View: ประวัติลูกค้า ---
     function renderHistory(container) {
       const activeCust = customers.find(c => c.id === selectedCustomerId);
       const custTx = transactions.filter(t => t.customerId === selectedCustomerId).sort((a,b) => b.timestamp - a.timestamp);
@@ -452,7 +442,7 @@
       container.innerHTML = `
         <div class="p-4 max-w-md mx-auto">
           <div class="flex items-center mb-6 pt-2">
-            <button onclick="switchView('delivery')" class="p-2 mr-2 bg-white rounded-full shadow-sm text-gray-600"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+            <button onclick="switchView('delivery')" class="p-2 mr-2 bg-white rounded-full shadow-sm text-gray-600 active:bg-gray-100"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
             <div><h2 class="font-bold text-xl text-gray-800">ประวัติการส่งน้ำ</h2><p class="text-sm text-gray-500">${activeCust?.name || ''}</p></div>
           </div>
           <div class="space-y-4">
@@ -462,7 +452,6 @@
       `;
     }
 
-    // --- View: บิลทั้งหมด ---
     function renderHistoryAll(container) {
       const sortedTx = [...transactions].sort((a,b) => b.timestamp - a.timestamp).slice(0, 50);
 
@@ -478,7 +467,6 @@
       `;
     }
 
-    // --- View: รายงาน ---
     function renderReports(container) {
       const d = new Date();
       let startDate = 0;
@@ -500,19 +488,32 @@
 
       const totalDel = stats.dO + stats.dP + stats.dC;
 
+      // -----------------------------
+      // ข้อมูลสำหรับรายงาน: สรุปยอดคงค้างรายบุคคล
+      // -----------------------------
+      const activeCustomers = customers.filter(c => safeNum(c.debt) > 0 || safeNum(c.stockOrange) > 0 || safeNum(c.stockPurple) > 0 || safeNum(c.stockCrate) > 0)
+        .sort((a, b) => safeNum(b.debt) - safeNum(a.debt));
+
+      const totalCurrentDebt = activeCustomers.reduce((sum, c) => sum + safeNum(c.debt), 0);
+      const totalCurrentOrange = activeCustomers.reduce((sum, c) => sum + safeNum(c.stockOrange), 0);
+      const totalCurrentPurple = activeCustomers.reduce((sum, c) => sum + safeNum(c.stockPurple), 0);
+      const totalCurrentCrate = activeCustomers.reduce((sum, c) => sum + safeNum(c.stockCrate), 0);
+
       container.innerHTML = `
         <div class="p-4 max-w-md mx-auto pb-24">
           <div class="mb-6 flex items-end justify-between bg-blue-600 text-white p-5 rounded-b-3xl shadow-md -mt-4 -mx-4 pt-8">
             <div><h1 class="text-2xl font-black tracking-tight">รายงานสรุปผล</h1></div>
-            <button onclick="downloadExcel()" class="flex items-center text-xs bg-white/20 hover:bg-white/30 px-3 py-2 rounded-xl font-bold"><i data-lucide="download" class="w-4 h-4 mr-1.5"></i> Excel</button>
+            <button onclick="downloadExcel()" class="flex items-center text-xs bg-white/20 hover:bg-white/30 px-3 py-2 rounded-xl font-bold transition-colors"><i data-lucide="download" class="w-4 h-4 mr-1.5"></i> Excel</button>
           </div>
+          
           <div class="flex bg-gray-200 p-1 rounded-xl mb-6 shadow-inner">
             ${['day', 'week', 'month', 'year'].map(p => `
-              <button onclick="reportPeriod='${p}'; render();" class="flex-1 py-2 text-sm font-bold rounded-lg ${reportPeriod === p ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500'}">
+              <button onclick="reportPeriod='${p}'; render();" class="flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${reportPeriod === p ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500'}">
                 ${p === 'day' ? 'วันนี้' : p === 'week' ? 'สัปดาห์' : p === 'month' ? 'เดือน' : 'ปี'}
               </button>
             `).join('')}
           </div>
+
           <div class="grid grid-cols-2 gap-4 mb-4">
             <div class="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center">
               <span class="text-gray-500 text-xs font-bold mb-1 flex items-center"><i data-lucide="check-circle" class="w-3 h-3 mr-1 text-green-500"></i> เก็บเงินสดได้</span>
@@ -523,28 +524,66 @@
               <span class="text-2xl font-black text-red-500">${stats.debt.toLocaleString()} ฿</span>
             </div>
           </div>
+
           <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-4">
             <h3 class="font-bold text-gray-800 mb-4 flex items-center"><i data-lucide="package" class="w-4.5 h-4.5 mr-2 text-blue-500"></i> สรุปการส่ง ถัง/ลัง (ออก ${totalDel})</h3>
             <div class="space-y-4">
               <div>
                 <div class="flex justify-between text-sm font-bold text-gray-700 mb-1"><span class="flex items-center text-orange-600"><i data-lucide="droplet" class="w-3.5 h-3.5 mr-1"></i> ถังส้ม</span><span>ส่ง ${stats.dO} / คืน ${stats.rO}</span></div>
-                <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden flex"><div class="bg-orange-500 h-2" style="width: ${totalDel ? (stats.dO/totalDel)*100 : 0}%"></div></div>
+                <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden flex"><div class="bg-orange-500 h-2 transition-all duration-500" style="width: ${totalDel ? (stats.dO/totalDel)*100 : 0}%"></div></div>
               </div>
               <div>
                 <div class="flex justify-between text-sm font-bold text-gray-700 mb-1"><span class="flex items-center text-purple-600"><i data-lucide="droplet" class="w-3.5 h-3.5 mr-1"></i> ถังม่วง</span><span>ส่ง ${stats.dP} / คืน ${stats.rP}</span></div>
-                <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden flex"><div class="bg-purple-600 h-2" style="width: ${totalDel ? (stats.dP/totalDel)*100 : 0}%"></div></div>
+                <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden flex"><div class="bg-purple-600 h-2 transition-all duration-500" style="width: ${totalDel ? (stats.dP/totalDel)*100 : 0}%"></div></div>
               </div>
               <div>
                 <div class="flex justify-between text-sm font-bold text-gray-700 mb-1"><span class="flex items-center text-amber-700"><i data-lucide="package" class="w-3.5 h-3.5 mr-1"></i> แบบลัง</span><span>ส่ง ${stats.dC} / คืน ${stats.rC}</span></div>
-                <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden flex"><div class="bg-amber-700 h-2" style="width: ${totalDel ? (stats.dC/totalDel)*100 : 0}%"></div></div>
+                <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden flex"><div class="bg-amber-700 h-2 transition-all duration-500" style="width: ${totalDel ? (stats.dC/totalDel)*100 : 0}%"></div></div>
               </div>
             </div>
           </div>
+
+          <!-- ตารางสรุปยอดคงค้างรายบุคคล -->
+          <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-4">
+            <h3 class="font-bold text-gray-800 mb-4 flex items-center"><i data-lucide="users" class="w-4.5 h-4.5 mr-2 text-indigo-500"></i> สรุปยอดคงค้างรายบุคคล</h3>
+            
+            <div class="mb-4 pb-4 border-b border-gray-100">
+              <div class="flex justify-between items-center mb-2">
+                <span class="text-sm font-bold text-gray-600">รวมยอดค้างจ่าย:</span>
+                <span class="text-lg font-black text-red-600">${totalCurrentDebt.toLocaleString()} ฿</span>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-sm font-bold text-gray-600">รวมคงเหลือ (ถัง/ลัง):</span>
+                <div class="flex gap-2 text-xs font-bold">
+                  <span class="text-orange-600 bg-orange-50 px-2 py-1 rounded">ส้ม ${totalCurrentOrange}</span>
+                  <span class="text-purple-600 bg-purple-50 px-2 py-1 rounded">ม่วง ${totalCurrentPurple}</span>
+                  <span class="text-amber-700 bg-amber-50 px-2 py-1 rounded">ลัง ${totalCurrentCrate}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="space-y-3 max-h-80 overflow-y-auto pr-1 no-scrollbar">
+              ${activeCustomers.length === 0 ? `<p class="text-sm text-gray-400 text-center py-4">ไม่มีข้อมูลคงค้าง</p>` : activeCustomers.map(c => `
+                <div onclick="goToDelivery('${c.id}')" class="flex flex-col p-3 bg-gray-50 rounded-xl border border-gray-100 active:bg-gray-200 cursor-pointer transition-colors">
+                  <div class="flex justify-between items-start mb-2">
+                    <span class="font-bold text-gray-800 text-sm">${c.name}</span>
+                    <span class="font-bold text-red-500 text-sm">${safeNum(c.debt) > 0 ? `${safeNum(c.debt).toLocaleString()} ฿` : '0 ฿'}</span>
+                  </div>
+                  <div class="flex gap-2 text-[10px] font-bold">
+                    ${safeNum(c.stockOrange) > 0 ? `<span class="flex items-center text-orange-600"><i data-lucide="droplet" class="w-3 h-3 mr-0.5"></i> ส้ม ${c.stockOrange}</span>` : ''}
+                    ${safeNum(c.stockPurple) > 0 ? `<span class="flex items-center text-purple-600"><i data-lucide="droplet" class="w-3 h-3 mr-0.5"></i> ม่วง ${c.stockPurple}</span>` : ''}
+                    ${safeNum(c.stockCrate) > 0 ? `<span class="flex items-center text-amber-700"><i data-lucide="package" class="w-3 h-3 mr-0.5"></i> ลัง ${c.stockCrate}</span>` : ''}
+                    ${safeNum(c.stockOrange) === 0 && safeNum(c.stockPurple) === 0 && safeNum(c.stockCrate) === 0 ? `<span class="text-gray-400">ไม่มี ถัง/ลัง ค้าง</span>` : ''}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
         </div>
       `;
     }
 
-    // --- View: สถิติ ---
     function renderStats(container) {
       const totalDebt = customers.reduce((s, c) => s + safeNum(c.debt), 0);
       const topDebtors = [...customers].filter(c => safeNum(c.debt) > 0).sort((a, b) => safeNum(b.debt) - safeNum(a.debt)).slice(0, 5);
@@ -564,7 +603,7 @@
             <h3 class="font-bold text-gray-800 mb-4 flex items-center"><i data-lucide="alert-circle" class="w-4.5 h-4.5 mr-2 text-indigo-500"></i> 5 อันดับลูกค้าค้างจ่ายสูงสุด</h3>
             <div class="space-y-2">
               ${topDebtors.length === 0 ? `<p class="text-sm text-gray-400 text-center py-4">ไม่มีลูกค้ายอดค้างชำระ 🎉</p>` : topDebtors.map((c, i) => `
-                <div onclick="goToDelivery('${c.id}')" class="flex justify-between items-center py-3 px-2 border-b border-gray-50 last:border-0 active:bg-gray-50 rounded-xl cursor-pointer">
+                <div onclick="goToDelivery('${c.id}')" class="flex justify-between items-center py-3 px-2 border-b border-gray-50 last:border-0 active:bg-gray-50 rounded-xl cursor-pointer transition-colors">
                   <div class="flex items-center"><span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold mr-3 shadow-sm ${i===0?'bg-red-100 text-red-600':i===1?'bg-orange-100 text-orange-600':'bg-gray-100 text-gray-500'}">${i + 1}</span><span class="text-sm font-bold text-gray-700">${c.name}</span></div>
                   <div class="flex items-center"><span class="text-red-500 font-bold mr-2">${safeNum(c.debt).toLocaleString()} ฿</span><i data-lucide="chevron-right" class="w-4 h-4 text-gray-300"></i></div>
                 </div>
@@ -574,7 +613,7 @@
           <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-4">
             <div class="flex justify-between items-center mb-4">
               <h3 class="font-bold text-gray-800 flex items-center"><i data-lucide="award" class="w-4.5 h-4.5 mr-2 text-indigo-500"></i> ถัง/ลัง คงค้างบ้านลูกค้า</h3>
-              <button onclick="switchView('stockList')" class="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-3 py-1.5 rounded-lg flex items-center active:bg-indigo-100">ดูรายบ้าน <i data-lucide="chevron-right" class="w-3 h-3 ml-1"></i></button>
+              <button onclick="switchView('stockList')" class="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-3 py-1.5 rounded-lg flex items-center active:bg-indigo-100 transition-colors">ดูรายบ้าน <i data-lucide="chevron-right" class="w-3 h-3 ml-1"></i></button>
             </div>
             <div class="grid grid-cols-3 gap-3 text-center">
               <div class="bg-orange-50 p-3 rounded-2xl"><span class="block text-xs font-bold text-orange-600 mb-1">ถังส้ม</span><span class="text-xl font-black text-orange-700">${totalOrange}</span></div>
@@ -586,7 +625,6 @@
       `;
     }
 
-    // --- View: รายละเอียดสต๊อกรายบ้าน ---
     function renderStockList(container) {
       const customersWithStock = customers.filter(c => safeNum(c.stockOrange) > 0 || safeNum(c.stockPurple) > 0 || safeNum(c.stockCrate) > 0)
         .sort((a, b) => (safeNum(b.stockOrange)+safeNum(b.stockPurple)+safeNum(b.stockCrate)) - (safeNum(a.stockOrange)+safeNum(a.stockPurple)+safeNum(a.stockCrate)));
@@ -594,7 +632,7 @@
       container.innerHTML = `
         <div class="p-4 max-w-md mx-auto pb-24">
           <div class="flex items-center mb-6 pt-2">
-            <button onclick="switchView('stats')" class="p-2 mr-2 bg-white rounded-full shadow-sm text-gray-600"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+            <button onclick="switchView('stats')" class="p-2 mr-2 bg-white rounded-full shadow-sm text-gray-600 active:bg-gray-100"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
             <div><h2 class="font-bold text-xl text-gray-800">รายละเอียดค้าง ถัง/ลัง</h2><p class="text-sm text-gray-500">แยกรายบ้านลูกค้า</p></div>
           </div>
           <div class="space-y-3">
@@ -616,7 +654,6 @@
       `;
     }
 
-    // --- Card บิล ---
     function renderTxCardHtml(tx, showCustomerName) {
       const dO = safeNum(tx.deliveries?.orange); const dP = safeNum(tx.deliveries?.purple); const dC = safeNum(tx.deliveries?.crate);
       const rO = safeNum(tx.returns?.orange); const rP = safeNum(tx.returns?.purple); const rC = safeNum(tx.returns?.crate);
@@ -784,7 +821,6 @@
       showToast('ดาวน์โหลดไฟล์ Excel เรียบร้อยแล้ว');
     }
 
-    // --- Initialize App ---
     window.onload = function() {
       render();
     };
