@@ -98,13 +98,19 @@
     // Customer Form State
     window.formName = ''; window.formPhone = ''; window.formZone = '';
     
-    // User (Staff/Admin) Form State
+    // User Form State
     window.editingUserId = null;
     window.newUserRole = 'staff'; window.newUserName = ''; window.newUserPin = '';
+
+    // Export State (กันค่าหายตอน Real-time Update)
+    const initDate = new Date();
+    window.exportStartDate = new Date(initDate.getFullYear(), initDate.getMonth(), 1).toISOString().split('T')[0];
+    window.exportEndDate = initDate.toISOString().split('T')[0];
 
     window.prices = { orange: 15, purple: 15, crate: 30, ownWash: 5, ownRefill: 15 };
 
     let loaded = { cust: false, tx: false, users: false, stock: false };
+    let isAppInitialized = false;
 
     // --- Real-time Listeners ---
     onSnapshot(collection(db, "customers"), (snap) => { window.customers = snap.docs.map(d => ({ id: d.id, ...d.data() })); checkLoad('cust'); });
@@ -126,8 +132,21 @@
     function checkLoad(module) {
       loaded[module] = true;
       if (loaded.cust && loaded.tx && loaded.users && loaded.stock) {
-        document.getElementById('loading-screen').classList.add('hidden');
-        initializeAppFlow();
+        const loader = document.getElementById('loading-screen');
+        if (loader && !loader.classList.contains('hidden')) {
+          loader.style.opacity = '0';
+          setTimeout(() => {
+            loader.classList.add('hidden');
+            document.getElementById('bottom-nav').classList.remove('hidden');
+          }, 500);
+        }
+        
+        if (!isAppInitialized) {
+          isAppInitialized = true;
+          initializeAppFlow();
+        } else {
+          window.render();
+        }
       }
     }
 
@@ -360,8 +379,12 @@
       const phone = document.getElementById('form-phone').value.trim();
       const zone = document.getElementById('form-zone').value.trim() || 'อื่นๆ';
       if (!name) return;
+
+      window.formName = name; window.formPhone = phone; window.formZone = zone;
+
       const submitBtn = e.target.querySelector('button[type="submit"]');
       submitBtn.innerHTML = '<div class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>';
+      submitBtn.disabled = true;
 
       try {
         if (isEdit) {
@@ -371,16 +394,18 @@
           await addDoc(collection(db, "customers"), { name, phone, zone, debt: 0, stockOrange: 0, stockPurple: 0, stockCrate: 0, stockOwnBottle: 0 });
           window.showToast('เพิ่มลูกค้าใหม่เรียบร้อยแล้ว');
         }
+        window.formName = ''; window.formPhone = ''; window.formZone = '';
         window.selectedZone = zone; window.searchQuery = ''; window.switchView('list');
       } catch (error) {
         window.showToast('เกิดข้อผิดพลาดในการบันทึก', 'error');
         submitBtn.innerText = 'บันทึกข้อมูล';
+        submitBtn.disabled = false;
       }
     };
 
     window.submitDelivery = async function() {
       const cust = window.customers.find(c => c.id === window.selectedCustomerId);
-      if (!cust) return;
+      if (!cust) return window.showToast('ไม่พบข้อมูลลูกค้า', 'error');
 
       const btn = document.getElementById('btn-submit-delivery');
       if(btn) btn.innerHTML = '<div class="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>';
@@ -502,7 +527,22 @@
     };
 
     // --- Views Rendering ---
+    let activeId = null;
+    let cursorStart = null;
+    let cursorEnd = null;
+
     window.render = function() {
+      // 1. จำตำแหน่ง Cursor กรณีผู้ใช้กำลังพิมพ์อยู่ตอนระบบ Auto-update
+      if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
+        activeId = document.activeElement.id;
+        try {
+           cursorStart = document.activeElement.selectionStart;
+           cursorEnd = document.activeElement.selectionEnd;
+        } catch(e) {}
+      } else {
+        activeId = null;
+      }
+
       const container = document.getElementById('app-container');
       if (!container) return;
 
@@ -520,6 +560,19 @@
       else if (window.currentView === 'adminStock') renderAdminStock(container);
 
       lucide.createIcons();
+
+      // 2. คืนค่า Cursor ให้พิมพ์ต่อได้ลื่นไหล
+      if (activeId) {
+        const el = document.getElementById(activeId);
+        if (el) {
+          el.focus();
+          try {
+            if (cursorStart !== null && cursorEnd !== null) {
+              el.setSelectionRange(cursorStart, cursorEnd);
+            }
+          } catch(e) {}
+        }
+      }
     };
 
     function renderSetupAdmin(container) {
@@ -593,7 +646,7 @@
 
           <div class="relative mb-4">
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i data-lucide="search" class="w-4 h-4 text-gray-400"></i></div>
-            <input type="text" value="${window.searchQuery}" oninput="window.searchQuery=this.value; window.render();" placeholder="ค้นหาชื่อ, โซน หรือเบอร์โทร..." class="w-full pl-10 pr-10 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+            <input type="text" id="search-list-input" value="${window.searchQuery}" oninput="window.searchQuery=this.value; window.render();" placeholder="ค้นหาชื่อ, โซน หรือเบอร์โทร..." class="w-full pl-10 pr-10 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
             ${window.searchQuery ? `<button onclick="window.searchQuery=''; window.render();" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400"><i data-lucide="x" class="w-4 h-4"></i></button>` : ''}
           </div>
 
@@ -639,7 +692,7 @@
 
     function renderDelivery(container) {
       const cust = window.customers.find(c => c.id === window.selectedCustomerId);
-      if (!cust) return;
+      if (!cust) { window.switchView('list'); return; } // ป้องกัน Error หากลูกค้าถูกลบระหว่างใช้งาน
 
       const calcTotal = (window.deliveries.orange * window.prices.orange) + (window.deliveries.purple * window.prices.purple) + (window.deliveries.crate * window.prices.crate) + (window.ownDeliverWash * window.prices.ownWash) + (window.ownDeliverRefill * window.prices.ownRefill);
 
@@ -675,9 +728,9 @@
                     <span class="font-bold text-gray-700 text-sm">${item==='orange'?'ถังส้ม (15฿)':item==='purple'?'ถังม่วง (15฿)':'แบบลัง (30฿)'}</span>
                   </div>
                   <div class="flex items-center gap-3">
-                    <button onclick="window.updateQty('deliver', '${item}', -1)" class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 active:bg-gray-200"><i data-lucide="minus" class="w-5 h-5"></i></button>
+                    <button onclick="window.updateQty('deliveries', '${item}', -1)" class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 active:bg-gray-200"><i data-lucide="minus" class="w-5 h-5"></i></button>
                     <span class="w-6 text-center font-black text-2xl text-gray-800">${window.deliveries[item]}</span>
-                    <button onclick="window.updateQty('deliver', '${item}', 1)" class="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-md ${item==='orange'?'bg-orange-500':item==='purple'?'bg-purple-600':'bg-amber-700'}"><i data-lucide="plus" class="w-5 h-5"></i></button>
+                    <button onclick="window.updateQty('deliveries', '${item}', 1)" class="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-md ${item==='orange'?'bg-orange-500':item==='purple'?'bg-purple-600':'bg-amber-700'}"><i data-lucide="plus" class="w-5 h-5"></i></button>
                   </div>
                 </div>
               `).join('')}
@@ -726,9 +779,9 @@
                       <span class="text-[11px] text-gray-500 mt-0.5">ค้างบ้าน: <span class="font-bold ${remainingStock < 0 ? 'text-red-500' : remainingStock === 0 ? 'text-green-500' : 'text-blue-600'}">${remainingStock < 0 ? 0 : remainingStock}</span></span>
                     </div>
                     <div class="flex items-center gap-3">
-                      <button onclick="window.updateQty('return', '${item}', -1)" class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 active:bg-gray-200"><i data-lucide="minus" class="w-5 h-5"></i></button>
+                      <button onclick="window.updateQty('returns', '${item}', -1)" class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 active:bg-gray-200"><i data-lucide="minus" class="w-5 h-5"></i></button>
                       <span class="w-6 text-center font-black text-2xl text-gray-800">${window.returns[item]}</span>
-                      <button onclick="window.updateQty('return', '${item}', 1)" class="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-md ${item==='orange'?'bg-orange-400':item==='purple'?'bg-purple-400':'bg-amber-600'}"><i data-lucide="plus" class="w-5 h-5"></i></button>
+                      <button onclick="window.updateQty('returns', '${item}', 1)" class="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-md ${item==='orange'?'bg-orange-400':item==='purple'?'bg-purple-400':'bg-amber-600'}"><i data-lucide="plus" class="w-5 h-5"></i></button>
                     </div>
                   </div>
                 `;
@@ -737,7 +790,7 @@
 
             <div class="bg-white rounded-3xl shadow-sm p-4 border border-gray-100">
               <label class="block text-sm font-bold text-gray-700 mb-2 flex items-center"><i data-lucide="message-square" class="w-4 h-4 mr-2 text-gray-400"></i> หมายเหตุ (ถ้ามี)</label>
-              <input type="text" value="${window.txNote}" oninput="window.txNote=this.value" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-sm" placeholder="เช่น โอนเงิน, ฝากไว้หน้าบ้าน..." />
+              <input type="text" id="tx-note-input" value="${window.txNote}" oninput="window.txNote=this.value; window.render();" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-sm" placeholder="เช่น โอนเงิน, ฝากไว้หน้าบ้าน..." />
             </div>
 
             <div class="bg-white rounded-3xl shadow-sm p-4 border border-gray-100">
@@ -766,6 +819,10 @@
       const allZones = window.customers.map(c => c.zone || 'อื่นๆ');
       const availableZones = [...new Set(allZones)].filter(z => z !== 'ทั้งหมด' && z !== 'อื่นๆ');
 
+      if (isEdit && activeCust && !window.formName) {
+        window.formName = activeCust.name; window.formPhone = activeCust.phone || ''; window.formZone = activeCust.zone || '';
+      }
+
       container.innerHTML = `
         <div class="p-4">
           <div class="flex items-center justify-between mb-6 pt-2">
@@ -779,20 +836,20 @@
           <form onsubmit="window.saveCustomer(event, ${isEdit})" class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
             <div class="mb-4">
               <label class="block text-gray-700 text-sm font-bold mb-2">ชื่อลูกค้า <span class="text-red-500">*</span></label>
-              <input type="text" id="form-name" value="${isEdit && activeCust ? activeCust.name : window.formName}" class="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-lg font-medium" required placeholder="เช่น ป้าศรี ซอย 1" />
+              <input type="text" id="form-name" value="${window.formName}" oninput="window.formName=this.value; window.render();" class="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-lg font-medium" required placeholder="เช่น ป้าศรี ซอย 1" />
             </div>
             <div class="mb-4">
               <label class="block text-gray-700 text-sm font-bold mb-2 flex items-center"><i data-lucide="phone" class="w-3.5 h-3.5 mr-1"></i> เบอร์โทรศัพท์ (ไม่บังคับ)</label>
-              <input type="tel" id="form-phone" value="${isEdit && activeCust ? (activeCust.phone || '') : window.formPhone}" class="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-lg font-medium" placeholder="08X-XXX-XXXX" />
+              <input type="tel" id="form-phone" value="${window.formPhone}" oninput="window.formPhone=this.value; window.render();" class="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-lg font-medium" placeholder="08X-XXX-XXXX" />
             </div>
             <div class="mb-6">
               <label class="block text-gray-700 text-sm font-bold mb-2">โซน / ซอย</label>
-              <input type="text" id="form-zone" value="${isEdit && activeCust ? (activeCust.zone === 'อื่นๆ' ? '' : activeCust.zone) : window.formZone}" class="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-lg font-medium" placeholder="พิมพ์ใหม่ หรือเลือกด้านล่าง" />
+              <input type="text" id="form-zone" value="${window.formZone}" oninput="window.formZone=this.value; window.render();" class="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-lg font-medium" placeholder="พิมพ์ใหม่ หรือเลือกด้านล่าง" />
               ${availableZones.length > 0 ? `
                 <div class="mt-3">
                   <p class="text-xs text-gray-400 mb-2 font-medium">กดเลือกโซน:</p>
                   <div class="flex flex-wrap gap-2">
-                    ${availableZones.map(z => `<button type="button" onclick="document.getElementById('form-zone').value='${z}'" class="px-3 py-1.5 rounded-lg text-sm font-bold border bg-gray-50 text-gray-500 border-gray-200 active:bg-gray-100">${z}</button>`).join('')}
+                    ${availableZones.map(z => `<button type="button" onclick="window.formZone='${z}'; window.render();" class="px-3 py-1.5 rounded-lg text-sm font-bold border bg-gray-50 text-gray-500 border-gray-200 active:bg-gray-100">${z}</button>`).join('')}
                   </div>
                 </div>
               ` : ''}
@@ -805,13 +862,14 @@
 
     function renderHistory(container) {
       const activeCust = window.customers.find(c => c.id === window.selectedCustomerId);
+      if (!activeCust) { window.switchView('list'); return; }
       const custTx = window.transactions.filter(t => t.customerId === window.selectedCustomerId).sort((a,b) => b.timestamp - a.timestamp);
 
       container.innerHTML = `
         <div class="p-4 max-w-md mx-auto pb-24">
           <div class="flex items-center mb-6 pt-2">
             <button onclick="window.switchView('delivery')" class="p-2 mr-2 bg-white rounded-full shadow-sm text-gray-600 active:bg-gray-100"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
-            <div><h2 class="font-bold text-xl text-gray-800">ประวัติการส่งน้ำ</h2><p class="text-sm text-gray-500">${activeCust?.name || ''}</p></div>
+            <div><h2 class="font-bold text-xl text-gray-800">ประวัติการส่งน้ำ</h2><p class="text-sm text-gray-500">${activeCust.name}</p></div>
           </div>
           <div class="space-y-4">
             ${custTx.length === 0 ? `<div class="text-center py-10 text-gray-400 bg-white rounded-2xl border border-gray-100">ไม่มีประวัติ</div>` : custTx.map(tx => renderTxCardHtml(tx, false)).join('')}
@@ -939,14 +997,14 @@
             <div class="grid grid-cols-2 gap-2 mb-3">
               <div>
                 <label class="text-[10px] font-bold text-gray-400 ml-1">ตั้งแต่วันที่</label>
-                <input type="date" id="export-start-date" class="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 bg-gray-50" />
+                <input type="date" id="export-start-date" value="${window.exportStartDate}" onchange="window.exportStartDate=this.value" class="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 bg-gray-50" />
               </div>
               <div>
                 <label class="text-[10px] font-bold text-gray-400 ml-1">ถึงวันที่</label>
-                <input type="date" id="export-end-date" class="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 bg-gray-50" />
+                <input type="date" id="export-end-date" value="${window.exportEndDate}" onchange="window.exportEndDate=this.value" class="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 bg-gray-50" />
               </div>
             </div>
-            <button onclick="window.downloadExcelRange()" class="w-full bg-green-600 text-white py-2.5 rounded-xl text-sm font-bold shadow-sm active:scale-95 flex items-center justify-center transition-transform"><i data-lucide="download" class="w-4 h-4 mr-1.5"></i> ดาวน์โหลด Excel ตามช่วงเวลา</button>
+            <button onclick="window.downloadExcelRange()" class="w-full bg-green-600 text-white py-2.5 rounded-xl text-sm font-bold shadow-sm active:scale-95 flex items-center justify-center transition-transform"><i data-lucide="download" class="w-4 h-4 mr-1.5"></i> ดาวน์โหลดช่วงเวลานี้</button>
           </div>
 
           <h3 class="text-sm font-bold text-gray-800 mb-3 ml-1">สรุปยอดขายบนแอป</h3>
@@ -1035,17 +1093,6 @@
           </div>
         </div>
       `;
-
-      setTimeout(() => {
-        const startInput = document.getElementById('export-start-date');
-        const endInput = document.getElementById('export-end-date');
-        if(startInput && endInput) {
-            const today = new Date();
-            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-            startInput.value = firstDay.toISOString().split('T')[0];
-            endInput.value = today.toISOString().split('T')[0];
-        }
-      }, 50);
     }
 
     function renderStats(container) {
@@ -1106,11 +1153,11 @@
                 ${window.editingUserId ? `<button type="button" onclick="window.cancelEditStaff()" class="text-[10px] text-red-500 font-bold bg-red-100 px-2 py-0.5 rounded active:bg-red-200">ยกเลิก</button>` : ''}
               </div>
               <div class="grid grid-cols-2 gap-2 mb-2">
-                <input type="text" value="${window.newUserName}" oninput="window.newUserName=this.value" placeholder="ชื่อเล่น/ชื่อจริง" class="px-3 py-2 rounded-xl border border-white focus:outline-none text-sm font-bold shadow-sm" required>
-                <input type="password" pattern="[0-9]*" inputmode="numeric" value="${window.newUserPin}" oninput="window.newUserPin=this.value" placeholder="PIN 4 หลัก" class="px-3 py-2 rounded-xl border border-white focus:outline-none text-sm font-bold shadow-sm text-center tracking-widest" required>
+                <input type="text" id="staff-name-input" value="${window.newUserName}" oninput="window.newUserName=this.value; window.render();" placeholder="ชื่อเล่น/ชื่อจริง" class="px-3 py-2 rounded-xl border border-white focus:outline-none text-sm font-bold shadow-sm" required>
+                <input type="password" id="staff-pin-input" pattern="[0-9]*" inputmode="numeric" value="${window.newUserPin}" oninput="window.newUserPin=this.value; window.render();" placeholder="PIN 4 หลัก" class="px-3 py-2 rounded-xl border border-white focus:outline-none text-sm font-bold shadow-sm text-center tracking-widest" required>
               </div>
               <div class="flex gap-2">
-                <select onchange="window.newUserRole=this.value" class="flex-1 px-3 py-2 rounded-xl border border-white text-sm font-bold shadow-sm text-gray-600 bg-white">
+                <select id="staff-role-input" onchange="window.newUserRole=this.value; window.render();" class="flex-1 px-3 py-2 rounded-xl border border-white text-sm font-bold shadow-sm text-gray-600 bg-white">
                   <option value="staff" ${window.newUserRole==='staff'?'selected':''}>พนักงาน (Staff)</option>
                   <option value="admin" ${window.newUserRole==='admin'?'selected':''}>เจ้าของ (Admin)</option>
                 </select>
