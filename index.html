@@ -102,7 +102,7 @@
     window.editingUserId = null;
     window.newUserRole = 'staff'; window.newUserName = ''; window.newUserPin = '';
 
-    // Export State (กันค่าหายตอน Real-time Update)
+    // Export State
     const initDate = new Date();
     window.exportStartDate = new Date(initDate.getFullYear(), initDate.getMonth(), 1).toISOString().split('T')[0];
     window.exportEndDate = initDate.toISOString().split('T')[0];
@@ -354,23 +354,40 @@
       catch(e) { window.showToast('อัปเดตสต๊อกไม่สำเร็จ', 'error'); }
     };
 
-    window.goToDelivery = function(custId) {
-      window.selectedCustomerId = custId;
-      window.deliveries = { orange: 0, purple: 0, crate: 0 };
-      window.returns = { orange: 0, purple: 0, crate: 0 };
-      window.ownDeliverWash = 0; window.ownDeliverRefill = 0; window.ownReturn = 0;
-      window.paymentStatus = 'paid'; window.txNote = '';
-      window.switchView('delivery');
+    // --- จัดการ Customer CRUD ---
+    window.openAddCustomer = function() {
+      window.formName = ''; 
+      window.formPhone = ''; 
+      window.formZone = window.selectedZone === 'ทั้งหมด' ? '' : window.selectedZone;
+      window.selectedCustomerId = null;
+      window.switchView('addCustomer');
     };
 
-    window.updateQty = function(targetObj, item, delta) {
-      window[targetObj][item] = Math.max(0, safeNum(window[targetObj][item]) + delta);
-      window.render();
+    window.openEditCustomer = function() {
+      const cust = window.customers.find(c => c.id === window.selectedCustomerId);
+      if (cust) {
+        window.formName = cust.name;
+        window.formPhone = cust.phone || '';
+        window.formZone = cust.zone === 'อื่นๆ' ? '' : (cust.zone || '');
+        window.switchView('editCustomer');
+      } else {
+        window.showToast('ไม่พบข้อมูลลูกค้า', 'error');
+      }
     };
 
-    window.updateOwnQty = function(field, delta) {
-      window[field] = Math.max(0, safeNum(window[field]) + delta);
-      window.render();
+    window.deleteCustomer = function() {
+      const cust = window.customers.find(c => c.id === window.selectedCustomerId);
+      if (!cust) return;
+
+      window.showModal('ลบลูกค้ารายนี้?', `คุณต้องการลบรายชื่อ "${cust.name}" ใช่หรือไม่? (ประวัติบิลจะยังคงอยู่)`, 'ลบข้อมูล', true, async () => {
+        try {
+          await deleteDoc(doc(db, "customers", window.selectedCustomerId));
+          window.showToast('ลบลูกค้าออกจากระบบแล้ว');
+          window.switchView('list');
+        } catch (error) {
+          window.showToast('เกิดข้อผิดพลาดในการลบข้อมูล', 'error');
+        }
+      });
     };
 
     window.saveCustomer = async function(e, isEdit) {
@@ -401,6 +418,25 @@
         submitBtn.innerText = 'บันทึกข้อมูล';
         submitBtn.disabled = false;
       }
+    };
+
+    window.goToDelivery = function(custId) {
+      window.selectedCustomerId = custId;
+      window.deliveries = { orange: 0, purple: 0, crate: 0 };
+      window.returns = { orange: 0, purple: 0, crate: 0 };
+      window.ownDeliverWash = 0; window.ownDeliverRefill = 0; window.ownReturn = 0;
+      window.paymentStatus = 'paid'; window.txNote = '';
+      window.switchView('delivery');
+    };
+
+    window.updateQty = function(targetObj, item, delta) {
+      window[targetObj][item] = Math.max(0, safeNum(window[targetObj][item]) + delta);
+      window.render();
+    };
+
+    window.updateOwnQty = function(field, delta) {
+      window[field] = Math.max(0, safeNum(window[field]) + delta);
+      window.render();
     };
 
     window.submitDelivery = async function() {
@@ -532,7 +568,7 @@
     let cursorEnd = null;
 
     window.render = function() {
-      // 1. จำตำแหน่ง Cursor กรณีผู้ใช้กำลังพิมพ์อยู่ตอนระบบ Auto-update
+      // จดจำสถานะพิมพ์ล่าสุด กัน Focus หายเวลาระบบ Update แบบ Real-time
       if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
         activeId = document.activeElement.id;
         try {
@@ -561,15 +597,13 @@
 
       lucide.createIcons();
 
-      // 2. คืนค่า Cursor ให้พิมพ์ต่อได้ลื่นไหล
+      // คืนค่า Focus เดิม
       if (activeId) {
         const el = document.getElementById(activeId);
         if (el) {
           el.focus();
           try {
-            if (cursorStart !== null && cursorEnd !== null) {
-              el.setSelectionRange(cursorStart, cursorEnd);
-            }
+            if (cursorStart !== null && cursorEnd !== null) el.setSelectionRange(cursorStart, cursorEnd);
           } catch(e) {}
         }
       }
@@ -690,9 +724,51 @@
       `;
     }
 
+    function renderCustomerForm(container) {
+      const isEdit = window.currentView === 'editCustomer';
+      
+      container.innerHTML = `
+        <div class="p-4">
+          <div class="flex items-center justify-between mb-6 pt-2">
+            <div class="flex items-center">
+              <button onclick="window.switchView('${isEdit ? 'delivery' : 'list'}')" class="p-2 mr-2 bg-white rounded-full shadow-sm text-gray-600 active:bg-gray-100"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+              <h2 class="font-bold text-xl text-gray-800">${isEdit ? 'แก้ไขข้อมูลลูกค้า' : 'เพิ่มลูกค้าใหม่'}</h2>
+            </div>
+            ${isEdit ? `<button onclick="window.deleteCustomer()" class="p-2 bg-red-50 text-red-600 rounded-full active:bg-red-100"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+          </div>
+
+          <form onsubmit="window.saveCustomer(event, ${isEdit})" class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+            <div class="mb-4">
+              <label class="block text-gray-700 text-sm font-bold mb-2">ชื่อลูกค้า <span class="text-red-500">*</span></label>
+              <input type="text" id="form-name" value="${window.formName}" oninput="window.formName=this.value" class="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-lg font-medium" required placeholder="เช่น ป้าศรี ซอย 1" />
+            </div>
+            <div class="mb-4">
+              <label class="block text-gray-700 text-sm font-bold mb-2 flex items-center"><i data-lucide="phone" class="w-3.5 h-3.5 mr-1"></i> เบอร์โทรศัพท์ (ไม่บังคับ)</label>
+              <input type="tel" id="form-phone" value="${window.formPhone}" oninput="window.formPhone=this.value" class="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-lg font-medium" placeholder="08X-XXX-XXXX" />
+            </div>
+            <div class="mb-6">
+              <label class="block text-gray-700 text-sm font-bold mb-2">โซน / ซอย</label>
+              <input type="text" id="form-zone" value="${window.formZone}" oninput="window.formZone=this.value" class="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-lg font-medium" placeholder="พิมพ์ใหม่ หรือเลือกด้านล่าง" />
+              
+              <!-- Quick Zone Selectors -->
+              <div class="mt-3">
+                <p class="text-xs text-gray-400 mb-2 font-medium">กดเลือกโซน:</p>
+                <div class="flex flex-wrap gap-2">
+                  ${[...new Set(window.customers.map(c => c.zone || 'อื่นๆ'))].filter(z => z !== 'ทั้งหมด' && z !== 'อื่นๆ').map(z => `
+                    <button type="button" onclick="document.getElementById('form-zone').value='${z}'; window.formZone='${z}';" class="px-3 py-1.5 rounded-lg text-sm font-bold border bg-gray-50 text-gray-500 border-gray-200 active:bg-gray-100">${z}</button>
+                  `).join('')}
+                </div>
+              </div>
+            </div>
+            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-md active:scale-95 flex justify-center items-center text-lg transition-transform">บันทึกข้อมูล</button>
+          </form>
+        </div>
+      `;
+    }
+
     function renderDelivery(container) {
       const cust = window.customers.find(c => c.id === window.selectedCustomerId);
-      if (!cust) { window.switchView('list'); return; } // ป้องกัน Error หากลูกค้าถูกลบระหว่างใช้งาน
+      if (!cust) { window.switchView('list'); return; }
 
       const calcTotal = (window.deliveries.orange * window.prices.orange) + (window.deliveries.purple * window.prices.purple) + (window.deliveries.crate * window.prices.crate) + (window.ownDeliverWash * window.prices.ownWash) + (window.ownDeliverRefill * window.prices.ownRefill);
 
@@ -709,7 +785,7 @@
               </div>
             </div>
             <div class="flex gap-2">
-              <button onclick="window.switchView('editCustomer')" class="p-2 bg-blue-50 text-blue-600 rounded-full active:bg-blue-100"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
+              <button onclick="window.openEditCustomer()" class="p-2 bg-blue-50 text-blue-600 rounded-full active:bg-blue-100"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
               <button onclick="window.switchView('history')" class="p-2 bg-orange-50 text-orange-600 rounded-full active:bg-orange-100"><i data-lucide="history" class="w-4 h-4"></i></button>
             </div>
           </div>
@@ -790,7 +866,7 @@
 
             <div class="bg-white rounded-3xl shadow-sm p-4 border border-gray-100">
               <label class="block text-sm font-bold text-gray-700 mb-2 flex items-center"><i data-lucide="message-square" class="w-4 h-4 mr-2 text-gray-400"></i> หมายเหตุ (ถ้ามี)</label>
-              <input type="text" id="tx-note-input" value="${window.txNote}" oninput="window.txNote=this.value; window.render();" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-sm" placeholder="เช่น โอนเงิน, ฝากไว้หน้าบ้าน..." />
+              <input type="text" id="tx-note-input" value="${window.txNote}" oninput="window.txNote=this.value" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-sm" placeholder="เช่น โอนเงิน, ฝากไว้หน้าบ้าน..." />
             </div>
 
             <div class="bg-white rounded-3xl shadow-sm p-4 border border-gray-100">
@@ -809,53 +885,6 @@
             </div>
             <button id="btn-submit-delivery" onclick="window.submitDelivery()" class="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-xl active:scale-95 transition-transform text-lg flex justify-center items-center">บันทึกรายการ</button>
           </div>
-        </div>
-      `;
-    }
-
-    function renderCustomerForm(container) {
-      const isEdit = window.currentView === 'editCustomer';
-      const activeCust = window.customers.find(c => c.id === window.selectedCustomerId);
-      const allZones = window.customers.map(c => c.zone || 'อื่นๆ');
-      const availableZones = [...new Set(allZones)].filter(z => z !== 'ทั้งหมด' && z !== 'อื่นๆ');
-
-      if (isEdit && activeCust && !window.formName) {
-        window.formName = activeCust.name; window.formPhone = activeCust.phone || ''; window.formZone = activeCust.zone || '';
-      }
-
-      container.innerHTML = `
-        <div class="p-4">
-          <div class="flex items-center justify-between mb-6 pt-2">
-            <div class="flex items-center">
-              <button onclick="window.switchView('${isEdit ? 'delivery' : 'list'}')" class="p-2 mr-2 bg-white rounded-full shadow-sm text-gray-600 active:bg-gray-100"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
-              <h2 class="font-bold text-xl text-gray-800">${isEdit ? 'แก้ไขข้อมูลลูกค้า' : 'เพิ่มลูกค้าใหม่'}</h2>
-            </div>
-            ${isEdit ? `<button onclick="window.deleteCustomer()" class="p-2 bg-red-50 text-red-600 rounded-full active:bg-red-100"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
-          </div>
-
-          <form onsubmit="window.saveCustomer(event, ${isEdit})" class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
-            <div class="mb-4">
-              <label class="block text-gray-700 text-sm font-bold mb-2">ชื่อลูกค้า <span class="text-red-500">*</span></label>
-              <input type="text" id="form-name" value="${window.formName}" oninput="window.formName=this.value; window.render();" class="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-lg font-medium" required placeholder="เช่น ป้าศรี ซอย 1" />
-            </div>
-            <div class="mb-4">
-              <label class="block text-gray-700 text-sm font-bold mb-2 flex items-center"><i data-lucide="phone" class="w-3.5 h-3.5 mr-1"></i> เบอร์โทรศัพท์ (ไม่บังคับ)</label>
-              <input type="tel" id="form-phone" value="${window.formPhone}" oninput="window.formPhone=this.value; window.render();" class="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-lg font-medium" placeholder="08X-XXX-XXXX" />
-            </div>
-            <div class="mb-6">
-              <label class="block text-gray-700 text-sm font-bold mb-2">โซน / ซอย</label>
-              <input type="text" id="form-zone" value="${window.formZone}" oninput="window.formZone=this.value; window.render();" class="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-lg font-medium" placeholder="พิมพ์ใหม่ หรือเลือกด้านล่าง" />
-              ${availableZones.length > 0 ? `
-                <div class="mt-3">
-                  <p class="text-xs text-gray-400 mb-2 font-medium">กดเลือกโซน:</p>
-                  <div class="flex flex-wrap gap-2">
-                    ${availableZones.map(z => `<button type="button" onclick="window.formZone='${z}'; window.render();" class="px-3 py-1.5 rounded-lg text-sm font-bold border bg-gray-50 text-gray-500 border-gray-200 active:bg-gray-100">${z}</button>`).join('')}
-                  </div>
-                </div>
-              ` : ''}
-            </div>
-            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-md active:scale-95 flex justify-center items-center text-lg transition-transform">บันทึกข้อมูล</button>
-          </form>
         </div>
       `;
     }
