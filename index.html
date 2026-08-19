@@ -4,16 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>ระบบงาน โรงงานน้ำดื่ม แม่จว้า หมู่ 8</title>
-  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <style>
     button, input, select { -webkit-tap-highlight-color: transparent; }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     
-    /* ซ่อนลูกศรขึ้นลงในช่องกรอกตัวเลข */
     input[type=number]::-webkit-inner-spin-button, 
     input[type=number]::-webkit-outer-spin-button { 
       -webkit-appearance: none; 
@@ -29,26 +26,20 @@
 </head>
 <body class="bg-gray-100 font-sans text-gray-900 min-h-screen relative pb-20 selection:bg-blue-200">
 
-  <!-- Loading Screen -->
   <div id="loading-screen" class="fixed inset-0 bg-white z-[60] flex flex-col items-center justify-center transition-opacity duration-500">
     <div class="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4"></div>
     <p class="text-blue-800 font-bold">กำลังเชื่อมต่อฐานข้อมูล...</p>
   </div>
 
-  <!-- Toast Notification -->
   <div id="toast" class="fixed top-4 left-1/2 z-50 px-6 py-3 rounded-full shadow-2xl font-bold flex items-center text-white pointer-events-none w-max max-w-[90%]">
     <span id="toast-icon" class="mr-2 flex items-center shrink-0"></span>
     <span id="toast-msg" class="text-sm"></span>
   </div>
 
-  <!-- App Container -->
   <div id="app-container" class="max-w-md mx-auto min-h-screen relative bg-gray-100"></div>
 
-  <!-- Bottom Navigation -->
-  <div id="bottom-nav" class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe pt-2 px-6 shadow-[0_-5px_10px_-5px_rgba(0,0,0,0.05)] max-w-md mx-auto z-40 flex justify-around items-center hidden">
-  </div>
+  <div id="bottom-nav" class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe pt-2 px-6 shadow-[0_-5px_10px_-5px_rgba(0,0,0,0.05)] max-w-md mx-auto z-40 flex justify-around items-center hidden"></div>
 
-  <!-- Modal Confirmation -->
   <div id="confirm-modal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm hidden">
     <div class="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl">
       <h3 id="modal-title" class="font-bold text-xl mb-2 text-gray-800"></h3>
@@ -63,7 +54,6 @@
     </div>
   </div>
 
-  <!-- Firebase & App Script -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, increment, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -81,10 +71,11 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // --- Global State ---
+    const ADMIN_ACCOUNT = { id: 'admin_fixed_id', name: 'ผู้ดูแลระบบ', pin: '1617', role: 'admin' };
+
     window.customers = [];
     window.transactions = [];
-    window.users = []; 
+    window.staffList = []; 
     window.globalStock = { orange: 0, purple: 0, crate: 0 }; 
     window.currentUser = null; 
 
@@ -99,12 +90,18 @@
     window.ownTakeWash = 0; 
     window.ownTakeRefill = 0; 
     window.ownDeliverDone = 0; 
+    window.ownTakeUnpaid = 0;
+    window.ownDeliverPayWash = 0;
+    window.ownDeliverPayRefill = 0;
+    window.ownBottlePayMode = 'pay_now'; 
     window.paymentStatus = 'paid';
     window.txNote = '';
 
     window.formName = ''; window.formPhone = ''; window.formZone = '';
+    window.formDebt = 0; window.formStockOrange = 0; window.formStockPurple = 0; window.formStockCrate = 0; window.formStockOwnBottle = 0;
+
     window.editingUserId = null;
-    window.newUserRole = 'staff'; window.newUserName = ''; window.newUserPin = '';
+    window.newUserName = ''; window.newUserPin = '';
 
     const initDate = new Date();
     window.exportStartDate = new Date(initDate.getFullYear(), initDate.getMonth(), 1).toISOString().split('T')[0];
@@ -115,14 +112,13 @@
     let loaded = { cust: false, tx: false, users: false, stock: false };
     let isAppInitialized = false;
 
-    // --- Real-time Listeners ---
     onSnapshot(collection(db, "customers"), (snap) => { window.customers = snap.docs.map(d => ({ id: d.id, ...d.data() })); checkLoad('cust'); });
     onSnapshot(collection(db, "transactions"), (snap) => { window.transactions = snap.docs.map(d => ({ id: d.id, ...d.data() })); checkLoad('tx'); });
     onSnapshot(collection(db, "users"), (snap) => { 
-      window.users = snap.docs.map(d => ({ id: d.id, ...d.data() })); 
-      if (window.currentUser) {
-        const updatedMe = window.users.find(u => u.id === window.currentUser.id);
-        if (updatedMe) window.currentUser = updatedMe;
+      window.staffList = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.role !== 'admin'); 
+      if (window.currentUser && window.currentUser.role !== 'admin') {
+        const updatedMe = window.staffList.find(u => u.id === window.currentUser.id);
+        if (updatedMe) window.currentUser = { ...updatedMe, role: 'staff' };
       }
       checkLoad('users'); 
     });
@@ -154,15 +150,16 @@
     }
 
     function initializeAppFlow() {
-      if (window.users.length === 0) {
-        window.switchView('setupAdmin');
+      const savedUserId = localStorage.getItem('water_app_user_id');
+      if (savedUserId === ADMIN_ACCOUNT.id) {
+        window.currentUser = ADMIN_ACCOUNT;
+        window.switchView('list');
         return;
       }
-      const savedUserId = localStorage.getItem('water_app_user_id');
       if (savedUserId) {
-        const user = window.users.find(u => u.id === savedUserId);
+        const user = window.staffList.find(u => u.id === savedUserId);
         if (user) {
-          window.currentUser = user;
+          window.currentUser = { ...user, role: 'staff' };
           window.switchView('list');
           return;
         }
@@ -170,7 +167,6 @@
       window.switchView('login');
     }
 
-    // --- Helpers ---
     const safeNum = (val) => (isNaN(Number(val)) ? 0 : Number(val));
     window.safeNum = safeNum;
 
@@ -231,7 +227,6 @@
       window.closeModal();
     });
 
-    // --- Navigation & Routing ---
     window.switchView = function(viewName, param = null) {
       if(window.currentUser && window.currentUser.role !== 'admin' && ['reports', 'adminStock', 'stockList'].includes(viewName)) {
         return window.showToast('คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'error');
@@ -258,7 +253,7 @@
         }
       }
 
-      if (['setupAdmin', 'login', 'addCustomer', 'editCustomer', 'delivery', 'history', 'stockList'].includes(viewName)) {
+      if (['login', 'addCustomer', 'editCustomer', 'delivery', 'history', 'stockList'].includes(viewName)) {
         navContainer.classList.add('hidden');
       } else {
         navContainer.classList.remove('hidden');
@@ -267,7 +262,6 @@
       window.render();
     };
 
-    // --- Auth Functions ---
     window.logout = function() {
       localStorage.removeItem('water_app_user_id');
       window.currentUser = null;
@@ -281,9 +275,21 @@
       const pin = document.getElementById('login-pin').value.trim();
       if (!userId || !pin) return;
 
-      const user = window.users.find(u => u.id === userId);
+      if (userId === ADMIN_ACCOUNT.id) {
+        if (pin === ADMIN_ACCOUNT.pin) {
+          window.currentUser = ADMIN_ACCOUNT;
+          localStorage.setItem('water_app_user_id', ADMIN_ACCOUNT.id);
+          window.showToast('เข้าสู่ระบบในฐานะ ผู้ดูแลระบบ');
+          window.switchView('list');
+        } else {
+          window.showToast('รหัส PIN ผู้ดูแลระบบไม่ถูกต้อง', 'error');
+        }
+        return;
+      }
+
+      const user = window.staffList.find(u => u.id === userId);
       if (user && user.pin === pin) {
-        window.currentUser = user;
+        window.currentUser = { ...user, role: 'staff' };
         localStorage.setItem('water_app_user_id', user.id);
         window.showToast(`ยินดีต้อนรับคุณ ${user.name}`);
         window.switchView('list');
@@ -292,31 +298,10 @@
       }
     };
 
-    window.setupFirstAdmin = async function(e) {
-      e.preventDefault();
-      const name = document.getElementById('setup-name').value.trim();
-      const pin = document.getElementById('setup-pin').value.trim();
-      if (!name || !pin) return;
-      const btn = document.getElementById('btn-setup-admin');
-      btn.innerHTML = '<div class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>';
-
-      try {
-        const docRef = await addDoc(collection(db, "users"), { name, pin, role: 'admin' });
-        await setDoc(doc(db, "system", "global_stock"), { orange: 0, purple: 0, crate: 0 });
-        window.showToast('สร้างผู้ดูแลระบบคนแรกเรียบร้อย!');
-        window.currentUser = { id: docRef.id, name, pin, role: 'admin' };
-        localStorage.setItem('water_app_user_id', docRef.id);
-        window.switchView('list');
-      } catch (err) {
-        window.showToast('เกิดข้อผิดพลาด', 'error');
-        btn.innerText = 'เริ่มต้นใช้งาน';
-      }
-    };
-
-    // --- Admin Control Functions ---
     window.saveStaff = async function(e) {
       e.preventDefault();
       if(!window.newUserName || !window.newUserPin) return window.showToast('กรุณากรอกข้อมูลให้ครบ', 'error');
+      
       const submitBtn = e.target.querySelector('button[type="submit"]');
       const originalText = submitBtn.innerText;
       submitBtn.innerHTML = '<div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>';
@@ -324,11 +309,11 @@
 
       try {
         if (window.editingUserId) {
-          await updateDoc(doc(db, "users", window.editingUserId), { name: window.newUserName, pin: window.newUserPin, role: window.newUserRole });
+          await updateDoc(doc(db, "users", window.editingUserId), { name: window.newUserName, pin: window.newUserPin, role: 'staff' });
           window.showToast('แก้ไขข้อมูลพนักงานสำเร็จ');
         } else {
-          await addDoc(collection(db, "users"), { name: window.newUserName, pin: window.newUserPin, role: window.newUserRole });
-          window.showToast('เพิ่มพนักงานสำเร็จ');
+          await addDoc(collection(db, "users"), { name: window.newUserName, pin: window.newUserPin, role: 'staff' });
+          window.showToast('เพิ่มพนักงานส่งน้ำสำเร็จ');
         }
         window.cancelEditStaff();
       } catch(error) { 
@@ -338,20 +323,22 @@
     };
 
     window.editStaff = function(id) {
-      const u = window.users.find(x => x.id === id);
+      const u = window.staffList.find(x => x.id === id);
       if(!u) return;
-      window.editingUserId = u.id; window.newUserName = u.name; window.newUserPin = u.pin; window.newUserRole = u.role;
+      window.editingUserId = u.id; 
+      window.newUserName = u.name; 
+      window.newUserPin = u.pin; 
       window.render();
     };
 
     window.cancelEditStaff = function() {
-      window.editingUserId = null; window.newUserName = ''; window.newUserPin = ''; window.newUserRole = 'staff';
+      window.editingUserId = null; window.newUserName = ''; window.newUserPin = '';
       window.render();
     };
 
     window.deleteStaff = function(id) {
-      if (id === window.currentUser.id) return window.showToast('ไม่สามารถลบบัญชีของตัวเองที่กำลังใช้งานอยู่ได้', 'error');
-      const u = window.users.find(x => x.id === id);
+      const u = window.staffList.find(x => x.id === id);
+      if(!u) return;
       window.showModal('ลบพนักงาน?', `คุณต้องการลบพนักงานชื่อ "${u.name}" ใช่หรือไม่?`, 'ลบข้อมูล', true, async () => {
         try {
           await deleteDoc(doc(db, "users", id));
@@ -362,7 +349,13 @@
 
     window.clearAllTransactions = function() {
       if(window.currentUser.role !== 'admin') return;
-      window.showModal('ล้างประวัติบิลทั้งหมด?', 'รายการบิลที่ผ่านมาทั้งหมดจะถูกลบทิ้งอย่างถาวร (ยอดหนี้และสต๊อกลูกค้าปัจจุบันจะไม่หาย) คุณแน่ใจหรือไม่?', 'ล้างบิลทั้งหมด', true, async () => {
+      
+      const pass = prompt("โซนอันตรายเฉพาะผู้ดูแลระบบ!\nกรุณาพิมพ์รหัส PIN '1617' เพื่อยืนยันการล้างประวัติบิลทั้งหมด:");
+      if (pass !== "1617") {
+        return window.showToast("รหัสยืนยันไม่ถูกต้อง ยกเลิกการทำรายการ", "error");
+      }
+
+      window.showModal('ยืนยันขั้นสุดท้าย?', 'รายการบิลที่ผ่านมาทั้งหมดจะถูกลบทิ้งอย่างถาวร (ยอดหนี้และสต๊อกลูกค้าปัจจุบันจะไม่หาย) คุณแน่ใจหรือไม่?', 'ล้างบิลทั้งหมด', true, async () => {
         window.showToast('กำลังล้างข้อมูลบิล กรุณารอสักครู่...');
         try {
           const batchArray = [];
@@ -379,25 +372,18 @@
             }
           }
           if (count > 0) batchArray.push(currentBatch);
-          
-          for (const b of batchArray) {
-            await b.commit();
-          }
+          for (const b of batchArray) await b.commit();
           window.showToast('ล้างประวัติบิลสำเร็จเรียบร้อย');
-        } catch (error) {
-          window.showToast('เกิดข้อผิดพลาดในการล้างข้อมูล', 'error');
-        }
+        } catch (error) { window.showToast('เกิดข้อผิดพลาดในการล้างข้อมูล', 'error'); }
       });
     };
 
-    // --- Direct Input Actions for Forms ---
     window.setGlobalStock = async function(item, val) {
       if(!window.currentUser || window.currentUser.role !== 'admin') return;
       try { 
         const newVal = Math.max(0, safeNum(val));
         await setDoc(doc(db, "system", "global_stock"), { [item]: newVal }, { merge: true }); 
-      } 
-      catch(e) { window.showToast('อัปเดตสต๊อกไม่สำเร็จ', 'error'); }
+      } catch(e) { window.showToast('อัปเดตสต๊อกไม่สำเร็จ', 'error'); }
     };
 
     window.updateGlobalStock = async function(item, delta) {
@@ -426,11 +412,10 @@
       window.render();
     };
 
-    // --- Customer Actions ---
     window.openAddCustomer = function() {
-      window.formName = ''; 
-      window.formPhone = ''; 
+      window.formName = ''; window.formPhone = ''; 
       window.formZone = window.selectedZone === 'ทั้งหมด' ? '' : window.selectedZone;
+      window.formDebt = 0; window.formStockOrange = 0; window.formStockPurple = 0; window.formStockCrate = 0; window.formStockOwnBottle = 0;
       window.selectedCustomerId = null;
       window.switchView('addCustomer');
     };
@@ -441,6 +426,11 @@
         window.formName = cust.name;
         window.formPhone = cust.phone || '';
         window.formZone = cust.zone === 'อื่นๆ' ? '' : (cust.zone || '');
+        window.formDebt = safeNum(cust.debt);
+        window.formStockOrange = safeNum(cust.stockOrange);
+        window.formStockPurple = safeNum(cust.stockPurple);
+        window.formStockCrate = safeNum(cust.stockCrate);
+        window.formStockOwnBottle = safeNum(cust.stockOwnBottle);
         window.switchView('editCustomer');
       } else {
         window.showToast('ไม่พบข้อมูลลูกค้า', 'error');
@@ -451,15 +441,12 @@
       if(window.currentUser.role !== 'admin') return window.showToast('เฉพาะผู้ดูแลระบบเท่านั้นที่ลบลูกค้าได้', 'error');
       const cust = window.customers.find(c => c.id === window.selectedCustomerId);
       if (!cust) return;
-
       window.showModal('ลบลูกค้ารายนี้?', `คุณต้องการลบรายชื่อ "${cust.name}" ใช่หรือไม่? (ประวัติบิลจะยังคงอยู่)`, 'ลบข้อมูล', true, async () => {
         try {
           await deleteDoc(doc(db, "customers", window.selectedCustomerId));
           window.showToast('ลบลูกค้าออกจากระบบแล้ว');
           window.switchView('list');
-        } catch (error) {
-          window.showToast('เกิดข้อผิดพลาดในการลบข้อมูล', 'error');
-        }
+        } catch (error) { window.showToast('เกิดข้อผิดพลาดในการลบข้อมูล', 'error'); }
       });
     };
 
@@ -476,12 +463,24 @@
       submitBtn.innerHTML = '<div class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>';
       submitBtn.disabled = true;
 
+      let updateData = { name, phone, zone };
+      if (isEdit && window.currentUser.role === 'admin') {
+        updateData.debt = Math.max(0, safeNum(window.formDebt));
+        updateData.stockOrange = Math.max(0, safeNum(window.formStockOrange));
+        updateData.stockPurple = Math.max(0, safeNum(window.formStockPurple));
+        updateData.stockCrate = Math.max(0, safeNum(window.formStockCrate));
+        updateData.stockOwnBottle = Math.max(0, safeNum(window.formStockOwnBottle));
+      }
+
       try {
         if (isEdit) {
-          await updateDoc(doc(db, "customers", window.selectedCustomerId), { name, phone, zone });
+          await updateDoc(doc(db, "customers", window.selectedCustomerId), updateData);
           window.showToast('อัปเดตข้อมูลลูกค้าเรียบร้อยแล้ว');
         } else {
-          await addDoc(collection(db, "customers"), { name, phone, zone, debt: 0, stockOrange: 0, stockPurple: 0, stockCrate: 0, stockOwnBottle: 0 });
+          await addDoc(collection(db, "customers"), { 
+            name, phone, zone, 
+            debt: 0, stockOrange: 0, stockPurple: 0, stockCrate: 0, stockOwnBottle: 0 
+          });
           window.showToast('เพิ่มลูกค้าใหม่เรียบร้อยแล้ว');
         }
         window.formName = ''; window.formPhone = ''; window.formZone = '';
@@ -498,6 +497,8 @@
       window.deliveries = { orange: 0, purple: 0, crate: 0 };
       window.returns = { orange: 0, purple: 0, crate: 0 };
       window.ownTakeWash = 0; window.ownTakeRefill = 0; window.ownDeliverDone = 0;
+      window.ownTakeUnpaid = 0; window.ownDeliverPayWash = 0; window.ownDeliverPayRefill = 0;
+      window.ownBottlePayMode = 'pay_now'; 
       window.paymentStatus = 'paid'; window.txNote = '';
       window.switchView('delivery');
     };
@@ -510,7 +511,7 @@
       if(btn) btn.innerHTML = '<div class="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>';
 
       const factoryTotal = (window.deliveries.orange * window.prices.orange) + (window.deliveries.purple * window.prices.purple) + (window.deliveries.crate * window.prices.crate);
-      const ownServiceTotal = (window.ownTakeWash * window.prices.ownWash) + (window.ownTakeRefill * window.prices.ownRefill);
+      const ownServiceTotal = (window.ownTakeWash * window.prices.ownWash) + (window.ownTakeRefill * window.prices.ownRefill) + (window.ownDeliverPayWash * window.prices.ownWash) + (window.ownDeliverPayRefill * window.prices.ownRefill);
       const calcTotal = factoryTotal + ownServiceTotal;
       
       const currentDebt = safeNum(cust.debt);
@@ -518,15 +519,20 @@
 
       if (window.paymentStatus === 'paid') {
         amountCollected = calcTotal + currentDebt; addedDebt = -currentDebt; newDebt = 0;
+      } else if (window.paymentStatus === 'support') {
+        amountCollected = 0; addedDebt = 0; newDebt = currentDebt;
       } else {
-        addedDebt = calcTotal; newDebt = currentDebt + addedDebt;
+        amountCollected = 0; addedDebt = calcTotal; newDebt = currentDebt + addedDebt;
       }
 
       const calcStock = (old, del, ret) => Math.max(0, safeNum(old) + safeNum(del) - safeNum(ret));
       const newOrange = calcStock(cust.stockOrange, window.deliveries.orange, window.returns.orange);
       const newPurple = calcStock(cust.stockPurple, window.deliveries.purple, window.returns.purple);
       const newCrate = calcStock(cust.stockCrate, window.deliveries.crate, window.returns.crate);
-      const newOwnBottle = Math.max(0, safeNum(cust.stockOwnBottle) + safeNum(window.ownTakeWash) + safeNum(window.ownTakeRefill) - safeNum(window.ownDeliverDone));
+      
+      const newOwnBottle = Math.max(0, safeNum(cust.stockOwnBottle) 
+        + safeNum(window.ownTakeWash) + safeNum(window.ownTakeRefill) + safeNum(window.ownTakeUnpaid) 
+        - safeNum(window.ownDeliverDone) - safeNum(window.ownDeliverPayWash) - safeNum(window.ownDeliverPayRefill));
 
       try {
         const batch = writeBatch(db);
@@ -537,6 +543,7 @@
           customerId: cust.id, customerName: cust.name, zone: cust.zone,
           deliveries: {...window.deliveries}, returns: {...window.returns}, 
           ownTakeWash: window.ownTakeWash, ownTakeRefill: window.ownTakeRefill, ownDeliverDone: window.ownDeliverDone,
+          ownTakeUnpaid: window.ownTakeUnpaid, ownDeliverPayWash: window.ownDeliverPayWash, ownDeliverPayRefill: window.ownDeliverPayRefill,
           paymentStatus: window.paymentStatus, totalAmount: calcTotal, 
           amountCollected, addedDebt, status: 'active', timestamp: Date.now(),
           note: window.txNote, createdBy: window.currentUser.name
@@ -560,8 +567,8 @@
       const tx = window.transactions.find(t => t.id === txId);
       if (!tx) return;
 
-      window.showModal('ต้องการยกเลิกบิลนี้?', 'ระบบจะดึงสต๊อกและยอดหนี้กลับ (สำหรับแอดมินเท่านั้น)', 'ยืนยันยกเลิกบิล', true, async () => {
-        if(window.currentUser.role !== 'admin') return window.showToast('สิทธิ์ไม่เพียงพอ แจ้งแอดมินเพื่อยกเลิก', 'error');
+      window.showModal('ต้องการยกเลิกบิลนี้?', 'ระบบจะดึงสต๊อกและยอดหนี้กลับ (สำหรับผู้ดูแลระบบเท่านั้น)', 'ยืนยันยกเลิกบิล', true, async () => {
+        if(window.currentUser.role !== 'admin') return window.showToast('สิทธิ์ไม่เพียงพอ แจ้งผู้ดูแลระบบเพื่อยกเลิก', 'error');
 
         try {
           const batch = writeBatch(db);
@@ -572,7 +579,11 @@
             const revPurple = Math.max(0, safeNum(cust.stockPurple) - safeNum(tx.deliveries?.purple) + safeNum(tx.returns?.purple));
             const revCrate = Math.max(0, safeNum(cust.stockCrate) - safeNum(tx.deliveries?.crate) + safeNum(tx.returns?.crate));
             const revDebt = Math.max(0, safeNum(cust.debt) - safeNum(tx.addedDebt));
-            const revOwn = Math.max(0, safeNum(cust.stockOwnBottle) - safeNum(tx.ownTakeWash) - safeNum(tx.ownTakeRefill) + safeNum(tx.ownDeliverDone));
+            const revOwn = Math.max(0, safeNum(cust.stockOwnBottle) 
+              - safeNum(tx.ownTakeWash) - safeNum(tx.ownTakeRefill) - safeNum(tx.ownTakeUnpaid) 
+              + safeNum(tx.ownDeliverDone) + safeNum(tx.ownDeliverPayWash) + safeNum(tx.ownDeliverPayRefill)
+              + safeNum(tx.ownDeliverWash) + safeNum(tx.ownDeliverRefill) - safeNum(tx.ownReturn) 
+            );
             
             batch.update(doc(db, "customers", cust.id), { debt: revDebt, stockOrange: revOrange, stockPurple: revPurple, stockCrate: revCrate, stockOwnBottle: revOwn });
           }
@@ -607,17 +618,22 @@
       const headers = [
         'วันที่และเวลา', 'ชื่อลูกค้า', 'โซน', 'พนักงานที่ส่ง', 'สถานะบิล', 'การจ่ายเงิน', 
         'ส่งน้ำ(ส้ม)', 'รับคืน(ส้ม)', 'ส่งน้ำ(ม่วง)', 'รับคืน(ม่วง)', 'ส่งน้ำ(ลัง)', 'รับคืน(ลัง)', 
-        'รับถังมา(ล้าง5฿)', 'รับถังมา(ล้าง+เติม15฿)', 'ส่งคืนลูกค้า(ถังส่วนตัว)', 
-        'ยอดเงินสดที่เก็บ(บาท)', 'ค้างจ่ายเพิ่ม(บาท)', 'หมายเหตุ'
+        'รับมาทำ(จ่ายเลย5฿)', 'รับมาทำ(จ่ายเลย15฿)', 'รับมาทำ(ยังไม่เก็บเงิน)', 
+        'ส่งคืน(เก็บเงิน5฿)', 'ส่งคืน(เก็บเงิน15฿)', 'ส่งคืน(จ่ายเงินแล้ว)',
+        'ยอดบิลรวม(บาท)', 'เงินสดที่เก็บ(บาท)', 'ค้างจ่ายเพิ่ม(บาท)', 'หมายเหตุ'
       ];
       
-      const rows = txList.map(tx => [
-        `"${window.formatDate(tx.timestamp)}"`, `"${tx.customerName}"`, `"${tx.zone}"`, `"${tx.createdBy || '-'}"`, 
-        tx.status === 'voided' ? 'ยกเลิก' : 'ปกติ', tx.paymentStatus === 'paid' ? 'จ่ายแล้ว' : 'ค้างจ่าย',
-        safeNum(tx.deliveries?.orange), safeNum(tx.returns?.orange), safeNum(tx.deliveries?.purple), safeNum(tx.returns?.purple), safeNum(tx.deliveries?.crate), safeNum(tx.returns?.crate), 
-        safeNum(tx.ownTakeWash), safeNum(tx.ownTakeRefill), safeNum(tx.ownDeliverDone),
-        safeNum(tx.amountCollected), safeNum(tx.addedDebt), `"${tx.note || ''}"`
-      ].join(','));
+      const rows = txList.map(tx => {
+        const paymentStr = tx.paymentStatus === 'paid' ? 'จ่ายแล้ว' : (tx.paymentStatus === 'support' ? 'สนับสนุน(ฟรี)' : 'ค้างจ่าย');
+        return [
+          `"${window.formatDate(tx.timestamp)}"`, `"${tx.customerName}"`, `"${tx.zone}"`, `"${tx.createdBy || '-'}"`, 
+          tx.status === 'voided' ? 'ยกเลิก' : 'ปกติ', paymentStr,
+          safeNum(tx.deliveries?.orange), safeNum(tx.returns?.orange), safeNum(tx.deliveries?.purple), safeNum(tx.returns?.purple), safeNum(tx.deliveries?.crate), safeNum(tx.returns?.crate), 
+          (safeNum(tx.ownTakeWash) + safeNum(tx.ownDeliverWash)), (safeNum(tx.ownTakeRefill) + safeNum(tx.ownDeliverRefill)), safeNum(tx.ownTakeUnpaid),
+          safeNum(tx.ownDeliverPayWash), safeNum(tx.ownDeliverPayRefill), (safeNum(tx.ownDeliverDone) + safeNum(tx.ownReturn)),
+          safeNum(tx.totalAmount), safeNum(tx.amountCollected), safeNum(tx.addedDebt), `"${tx.note || ''}"`
+        ].join(',');
+      });
 
       const blob = new Blob(['\uFEFF' + headers.join(',') + '\n' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
@@ -625,7 +641,6 @@
       window.showToast('ดาวน์โหลดไฟล์ Excel สำเร็จ');
     };
 
-    // --- Views Rendering Engine ---
     let activeId = null;
     let cursorStart = null;
     let cursorEnd = null;
@@ -643,7 +658,6 @@
       if (!container) return;
 
       if (window.currentView === 'loading') container.innerHTML = '';
-      else if (window.currentView === 'setupAdmin') renderSetupAdmin(container);
       else if (window.currentView === 'login') renderLogin(container);
       else if (window.currentView === 'list') renderList(container);
       else if (window.currentView === 'addCustomer' || window.currentView === 'editCustomer') renderCustomerForm(container);
@@ -670,30 +684,6 @@
       }
     };
 
-    // --- Components ---
-    function renderSetupAdmin(container) {
-      container.innerHTML = `
-        <div class="p-6 max-w-sm mx-auto min-h-screen flex flex-col justify-center">
-          <div class="text-center mb-8">
-            <div class="bg-blue-600 text-white w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg"><i data-lucide="shield-check" class="w-8 h-8"></i></div>
-            <h1 class="text-2xl font-black text-gray-800">ตั้งค่าระบบครั้งแรก</h1>
-            <p class="text-sm text-gray-500 mt-2">สร้างบัญชีผู้ดูแลระบบ (Admin)</p>
-          </div>
-          <form onsubmit="window.setupFirstAdmin(event)" class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-            <div class="mb-4">
-              <label class="block text-gray-700 text-sm font-bold mb-2">ชื่อของคุณ</label>
-              <input type="text" id="setup-name" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-lg font-medium outline-none" placeholder="เช่น เฮียชัย" required />
-            </div>
-            <div class="mb-6">
-              <label class="block text-gray-700 text-sm font-bold mb-2">ตั้งรหัส PIN (ตัวเลข)</label>
-              <input type="password" pattern="[0-9]*" inputmode="numeric" id="setup-pin" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-lg font-black tracking-widest text-center outline-none" placeholder="****" required />
-            </div>
-            <button type="submit" id="btn-setup-admin" class="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-md active:scale-95 flex justify-center items-center text-lg">เริ่มต้นใช้งาน</button>
-          </form>
-        </div>
-      `;
-    }
-
     function renderLogin(container) {
       container.innerHTML = `
         <div class="p-6 max-w-sm mx-auto min-h-screen flex flex-col justify-center pb-20">
@@ -703,10 +693,11 @@
           </div>
           <form onsubmit="window.loginUser(event)" class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
             <div class="mb-4">
-              <label class="block text-gray-700 text-sm font-bold mb-2">เลือกชื่อผู้ใช้งาน</label>
+              <label class="block text-gray-700 text-sm font-bold mb-2">เลือกผู้ใช้งาน</label>
               <select id="login-user-select" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-lg font-medium bg-white outline-none">
                 <option value="">-- เลือกชื่อ --</option>
-                ${window.users.map(u => `<option value="${u.id}">${u.name} (${u.role === 'admin' ? 'เจ้าของ' : 'พนักงาน'})</option>`).join('')}
+                <option value="${ADMIN_ACCOUNT.id}" class="font-bold text-red-600">👑 ผู้ดูแลระบบ (Admin)</option>
+                ${window.staffList.map(u => `<option value="${u.id}">${u.name} (พนักงาน)</option>`).join('')}
               </select>
             </div>
             <div class="mb-6">
@@ -820,7 +811,39 @@
                 </div>
               </div>
             </div>
-            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-md active:scale-95 flex justify-center items-center text-lg transition-transform">บันทึกข้อมูล</button>
+
+            ${isEdit && window.currentUser.role === 'admin' ? `
+              <div class="mt-6 pt-5 border-t border-gray-100">
+                <h3 class="font-bold text-red-600 mb-3 flex items-center"><i data-lucide="settings-2" class="w-4 h-4 mr-2"></i> ปรับปรุงยอดยกมา (เฉพาะ Admin)</h3>
+                <div class="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label class="block text-gray-700 text-[11px] font-bold mb-1">หนี้คงค้าง (บาท)</label>
+                    <input type="number" id="form-debt" value="${window.formDebt}" onchange="window.formDebt=this.value" class="w-full px-3 py-2.5 rounded-xl border border-red-200 focus:ring-2 focus:ring-red-500 text-sm font-bold bg-red-50 text-red-700 outline-none" />
+                  </div>
+                  <div>
+                    <label class="block text-gray-700 text-[11px] font-bold mb-1">ถังส่วนตัว (ค้างร้าน)</label>
+                    <input type="number" id="form-own" value="${window.formStockOwnBottle}" onchange="window.formStockOwnBottle=this.value" class="w-full px-3 py-2.5 rounded-xl border border-indigo-200 focus:ring-2 focus:ring-indigo-500 text-sm font-bold bg-indigo-50 text-indigo-700 outline-none" />
+                  </div>
+                </div>
+                <div class="grid grid-cols-3 gap-2">
+                  <div>
+                    <label class="block text-gray-700 text-[11px] font-bold mb-1">ค้างถังส้ม</label>
+                    <input type="number" id="form-orange" value="${window.formStockOrange}" onchange="window.formStockOrange=this.value" class="w-full px-3 py-2.5 rounded-xl border border-orange-200 focus:ring-2 focus:ring-orange-500 text-sm font-bold bg-orange-50 text-orange-700 outline-none" />
+                  </div>
+                  <div>
+                    <label class="block text-gray-700 text-[11px] font-bold mb-1">ค้างถังม่วง</label>
+                    <input type="number" id="form-purple" value="${window.formStockPurple}" onchange="window.formStockPurple=this.value" class="w-full px-3 py-2.5 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500 text-sm font-bold bg-purple-50 text-purple-700 outline-none" />
+                  </div>
+                  <div>
+                    <label class="block text-gray-700 text-[11px] font-bold mb-1">ค้างลัง</label>
+                    <input type="number" id="form-crate" value="${window.formStockCrate}" onchange="window.formStockCrate=this.value" class="w-full px-3 py-2.5 rounded-xl border border-amber-200 focus:ring-2 focus:ring-amber-500 text-sm font-bold bg-amber-50 text-amber-700 outline-none" />
+                  </div>
+                </div>
+                <p class="text-[10px] text-red-500 mt-2 font-semibold">* ตัวเลขนี้จะไปทับข้อมูลปัจจุบันของลูกค้าทันที</p>
+              </div>
+            ` : ''}
+
+            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-md mt-6 active:scale-95 flex justify-center items-center text-lg transition-transform">บันทึกข้อมูล</button>
           </form>
         </div>
       `;
@@ -830,7 +853,9 @@
       const cust = window.customers.find(c => c.id === window.selectedCustomerId);
       if (!cust) { window.switchView('list'); return; }
 
-      const calcTotal = (window.deliveries.orange * window.prices.orange) + (window.deliveries.purple * window.prices.purple) + (window.deliveries.crate * window.prices.crate) + (window.ownTakeWash * window.prices.ownWash) + (window.ownTakeRefill * window.prices.ownRefill);
+      const factoryTotal = (window.deliveries.orange * window.prices.orange) + (window.deliveries.purple * window.prices.purple) + (window.deliveries.crate * window.prices.crate);
+      const ownServiceTotal = (window.ownTakeWash * window.prices.ownWash) + (window.ownTakeRefill * window.prices.ownRefill) + (window.ownDeliverPayWash * window.prices.ownWash) + (window.ownDeliverPayRefill * window.prices.ownRefill);
+      const calcTotal = factoryTotal + ownServiceTotal;
 
       container.innerHTML = `
         <div class="pb-32 relative">
@@ -874,32 +899,67 @@
 
             <div class="bg-white rounded-3xl shadow-sm p-4 border border-indigo-50 relative overflow-hidden">
               <div class="absolute top-0 left-0 w-1.5 h-full bg-indigo-400"></div>
-              <h3 class="font-bold text-indigo-800 mb-2 flex items-center"><i data-lucide="archive" class="w-4 h-4 mr-2"></i> ถังส่วนตัวลูกค้า <span class="text-xs text-indigo-500 font-normal ml-2">(ค้างร้าน: ${safeNum(cust.stockOwnBottle) + window.ownTakeWash + window.ownTakeRefill - window.ownDeliverDone})</span></h3>
+              <h3 class="font-bold text-indigo-800 mb-2 flex items-center flex-wrap">
+                <i data-lucide="archive" class="w-4 h-4 mr-2"></i> ถังส่วนตัวลูกค้า 
+                <span class="text-sm font-black text-red-600 ml-2 bg-red-50 px-2 py-0.5 rounded-lg border border-red-200 tracking-wide shadow-sm">(ค้างร้าน: ${safeNum(cust.stockOwnBottle) + window.ownTakeWash + window.ownTakeRefill + window.ownTakeUnpaid - window.ownDeliverDone - window.ownDeliverPayWash - window.ownDeliverPayRefill})</span>
+              </h3>
               
-              <div class="flex justify-between items-center py-2.5 border-b border-gray-50">
-                <span class="font-bold text-gray-700 text-[13px] leading-tight w-1/2">รับถังจากลูกค้า<br><span class="text-indigo-500 text-[11px]">มาล้าง+เติมน้ำ (15฿)</span></span>
-                <div class="flex items-center gap-1">
-                  <button onclick="window.updateOwnQty('ownTakeRefill', -1)" class="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
-                  <input type="number" id="own-take-refill-input" inputmode="numeric" pattern="[0-9]*" value="${window.ownTakeRefill}" onchange="window.setOwnQty('ownTakeRefill', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
-                  <button onclick="window.updateOwnQty('ownTakeRefill', 1)" class="w-9 h-9 rounded-full bg-indigo-500 text-white shadow-md flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
-                </div>
+              <div class="flex gap-2 mb-3 bg-indigo-100/50 p-1 rounded-xl">
+                <button onclick="window.ownBottlePayMode='pay_now'; window.render();" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${window.ownBottlePayMode === 'pay_now' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-indigo-600'}">รับถัง (จ่ายเลย)</button>
+                <button onclick="window.ownBottlePayMode='pay_later'; window.render();" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${window.ownBottlePayMode === 'pay_later' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-indigo-600'}">ส่งคืน (ค่อยจ่าย)</button>
               </div>
-              <div class="flex justify-between items-center py-2.5 border-b border-gray-50">
-                <span class="font-bold text-gray-700 text-[13px] leading-tight w-1/2">รับถังจากลูกค้า<br><span class="text-indigo-500 text-[11px]">มาล้างอย่างเดียว (5฿)</span></span>
-                <div class="flex items-center gap-1">
-                  <button onclick="window.updateOwnQty('ownTakeWash', -1)" class="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
-                  <input type="number" id="own-take-wash-input" inputmode="numeric" pattern="[0-9]*" value="${window.ownTakeWash}" onchange="window.setOwnQty('ownTakeWash', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
-                  <button onclick="window.updateOwnQty('ownTakeWash', 1)" class="w-9 h-9 rounded-full bg-indigo-400 text-white shadow-md flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
+
+              ${window.ownBottlePayMode === 'pay_now' ? `
+                <div class="flex justify-between items-center py-2.5 border-b border-gray-50">
+                  <span class="font-bold text-gray-700 text-[13px] leading-tight w-1/2">รับถังมาล้าง+เติม<br><span class="text-indigo-500 text-[11px]">(เก็บเงินเลย 15฿)</span></span>
+                  <div class="flex items-center gap-1">
+                    <button onclick="window.updateOwnQty('ownTakeRefill', -1)" class="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
+                    <input type="number" id="own-take-refill-input" inputmode="numeric" pattern="[0-9]*" value="${window.ownTakeRefill}" onchange="window.setOwnQty('ownTakeRefill', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                    <button onclick="window.updateOwnQty('ownTakeRefill', 1)" class="w-9 h-9 rounded-full bg-indigo-500 text-white shadow-md flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                  </div>
                 </div>
-              </div>
-              <div class="flex justify-between items-center py-2.5 bg-gray-50 -mx-4 px-4 pb-3 rounded-b-xl mt-2 border-t border-gray-100">
-                <span class="font-bold text-gray-600 text-[13px]"><i data-lucide="corner-up-left" class="w-3 h-3 inline mr-1 text-gray-400"></i>ส่งคืนถังลูกค้า (ทำเสร็จแล้ว)</span>
-                <div class="flex items-center gap-1">
-                  <button onclick="window.updateOwnQty('ownDeliverDone', -1)" class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
-                  <input type="number" id="own-deliver-done-input" inputmode="numeric" pattern="[0-9]*" value="${window.ownDeliverDone}" onchange="window.setOwnQty('ownDeliverDone', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
-                  <button onclick="window.updateOwnQty('ownDeliverDone', 1)" class="w-8 h-8 rounded-full bg-gray-500 text-white shadow-md flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                <div class="flex justify-between items-center py-2.5 border-b border-gray-50">
+                  <span class="font-bold text-gray-700 text-[13px] leading-tight w-1/2">รับถังมาล้างอย่างเดียว<br><span class="text-indigo-500 text-[11px]">(เก็บเงินเลย 5฿)</span></span>
+                  <div class="flex items-center gap-1">
+                    <button onclick="window.updateOwnQty('ownTakeWash', -1)" class="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
+                    <input type="number" id="own-take-wash-input" inputmode="numeric" pattern="[0-9]*" value="${window.ownTakeWash}" onchange="window.setOwnQty('ownTakeWash', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                    <button onclick="window.updateOwnQty('ownTakeWash', 1)" class="w-9 h-9 rounded-full bg-indigo-400 text-white shadow-md flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                  </div>
                 </div>
-              </div>
+                <div class="flex justify-between items-center py-2.5 bg-gray-50 -mx-4 px-4 pb-3 rounded-b-xl mt-2 border-t border-gray-100">
+                  <span class="font-bold text-gray-600 text-[13px]"><i data-lucide="corner-up-left" class="w-3 h-3 inline mr-1 text-gray-400"></i>ส่งคืนถังลูกค้า (ทำเสร็จแล้ว)</span>
+                  <div class="flex items-center gap-1">
+                    <button onclick="window.updateOwnQty('ownDeliverDone', -1)" class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
+                    <input type="number" id="own-deliver-done-input" inputmode="numeric" pattern="[0-9]*" value="${window.ownDeliverDone}" onchange="window.setOwnQty('ownDeliverDone', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                    <button onclick="window.updateOwnQty('ownDeliverDone', 1)" class="w-8 h-8 rounded-full bg-gray-500 text-white shadow-md flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                  </div>
+                </div>
+              ` : `
+                <div class="flex justify-between items-center py-2.5 border-b border-gray-50">
+                  <span class="font-bold text-gray-700 text-[13px] leading-tight w-1/2">รับถังมาทำ<br><span class="text-indigo-500 text-[11px]">(ยังไม่เก็บเงิน รอตอนส่ง)</span></span>
+                  <div class="flex items-center gap-1">
+                    <button onclick="window.updateOwnQty('ownTakeUnpaid', -1)" class="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
+                    <input type="number" id="own-take-unpaid-input" inputmode="numeric" pattern="[0-9]*" value="${window.ownTakeUnpaid}" onchange="window.setOwnQty('ownTakeUnpaid', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                    <button onclick="window.updateOwnQty('ownTakeUnpaid', 1)" class="w-9 h-9 rounded-full bg-indigo-300 text-white shadow-md flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                  </div>
+                </div>
+                <div class="flex justify-between items-center py-2.5 bg-gray-50 -mx-4 px-4 pb-1 mt-2 border-t border-gray-100">
+                  <span class="font-bold text-gray-600 text-[13px] leading-tight w-1/2"><i data-lucide="corner-up-left" class="w-3 h-3 inline mr-1 text-gray-400"></i>ส่งคืนลูกค้า<br><span class="text-indigo-500 text-[11px] ml-5">(เก็บค่าล้าง+เติม 15฿)</span></span>
+                  <div class="flex items-center gap-1">
+                    <button onclick="window.updateOwnQty('ownDeliverPayRefill', -1)" class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
+                    <input type="number" id="own-deliver-pay-refill-input" inputmode="numeric" pattern="[0-9]*" value="${window.ownDeliverPayRefill}" onchange="window.setOwnQty('ownDeliverPayRefill', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                    <button onclick="window.updateOwnQty('ownDeliverPayRefill', 1)" class="w-8 h-8 rounded-full bg-indigo-500 text-white shadow-md flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                  </div>
+                </div>
+                <div class="flex justify-between items-center py-2.5 bg-gray-50 -mx-4 px-4 pb-3 rounded-b-xl border-b border-gray-100">
+                  <span class="font-bold text-gray-600 text-[13px] leading-tight w-1/2"><i data-lucide="corner-up-left" class="w-3 h-3 inline mr-1 text-gray-400 opacity-0"></i>ส่งคืนลูกค้า<br><span class="text-indigo-500 text-[11px] ml-5">(เก็บค่าล้าง 5฿)</span></span>
+                  <div class="flex items-center gap-1">
+                    <button onclick="window.updateOwnQty('ownDeliverPayWash', -1)" class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
+                    <input type="number" id="own-deliver-pay-wash-input" inputmode="numeric" pattern="[0-9]*" value="${window.ownDeliverPayWash}" onchange="window.setOwnQty('ownDeliverPayWash', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                    <button onclick="window.updateOwnQty('ownDeliverPayWash', 1)" class="w-8 h-8 rounded-full bg-indigo-400 text-white shadow-md flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                  </div>
+                </div>
+              `}
             </div>
 
             <div class="bg-white rounded-3xl shadow-sm p-4 border border-gray-100 relative overflow-hidden">
@@ -931,9 +991,10 @@
 
             <div class="bg-white rounded-3xl shadow-sm p-4 border border-gray-100">
               <h3 class="font-bold text-gray-800 mb-3 flex items-center"><i data-lucide="credit-card" class="w-4 h-4 mr-2 text-blue-500"></i> สถานะเก็บเงิน</h3>
-              <div class="flex gap-3">
-                <button onclick="window.paymentStatus='paid'; window.render();" class="flex-1 py-3.5 rounded-2xl font-bold flex flex-col items-center border-2 transition-all ${window.paymentStatus === 'paid' ? 'bg-green-50 text-green-700 border-green-500 shadow-sm' : 'bg-white text-gray-400 border-gray-100'}"><i data-lucide="check-circle" class="w-5 h-5 mb-1"></i> เคลียร์ยอด</button>
-                <button onclick="window.paymentStatus='unpaid'; window.render();" class="flex-1 py-3.5 rounded-2xl font-bold flex flex-col items-center border-2 transition-all ${window.paymentStatus === 'unpaid' ? 'bg-red-50 text-red-600 border-red-500 shadow-sm' : 'bg-white text-gray-400 border-gray-100'}"><i data-lucide="alert-circle" class="w-5 h-5 mb-1"></i> ค้างไว้ก่อน</button>
+              <div class="flex gap-2">
+                <button onclick="window.paymentStatus='paid'; window.render();" class="flex-1 py-3 rounded-xl font-bold flex flex-col items-center border-2 transition-all ${window.paymentStatus === 'paid' ? 'bg-green-50 text-green-700 border-green-500 shadow-sm' : 'bg-white text-gray-400 border-gray-100'}"><i data-lucide="check-circle" class="w-4 h-4 mb-1"></i> จ่ายแล้ว</button>
+                <button onclick="window.paymentStatus='unpaid'; window.render();" class="flex-1 py-3 rounded-xl font-bold flex flex-col items-center border-2 transition-all ${window.paymentStatus === 'unpaid' ? 'bg-orange-50 text-orange-600 border-orange-500 shadow-sm' : 'bg-white text-gray-400 border-gray-100'}"><i data-lucide="alert-circle" class="w-4 h-4 mb-1"></i> ค้างยอด</button>
+                <button onclick="window.paymentStatus='support'; window.render();" class="flex-1 py-3 rounded-xl font-bold flex flex-col items-center border-2 transition-all ${window.paymentStatus === 'support' ? 'bg-pink-50 text-pink-600 border-pink-500 shadow-sm' : 'bg-white text-gray-400 border-gray-100'}"><i data-lucide="gift" class="w-4 h-4 mb-1"></i> สนับสนุน</button>
               </div>
             </div>
           </div>
@@ -941,7 +1002,7 @@
           <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 pb-6 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.1)] max-w-md mx-auto z-20">
             <div class="flex justify-between items-end mb-4 px-2">
               <div><p class="text-gray-500 text-[10px] font-bold mb-0.5">ค่าบริการ ${calcTotal} + หนี้เก่า ${safeNum(cust.debt)}</p><p class="text-sm text-gray-800 font-black">ต้องเก็บเงินรวม</p></div>
-              <span class="text-3xl font-black text-blue-700">${calcTotal + safeNum(cust.debt)} ฿</span>
+              <span class="text-3xl font-black ${window.paymentStatus === 'support' ? 'text-pink-500' : 'text-blue-700'}">${window.paymentStatus === 'support' ? 0 : calcTotal + safeNum(cust.debt)} ฿</span>
             </div>
             <button id="btn-submit-delivery" onclick="window.submitDelivery()" class="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-xl active:scale-95 transition-transform text-lg flex justify-center items-center">บันทึกรายการ</button>
           </div>
@@ -985,7 +1046,23 @@
     function renderTxCardHtml(tx, showCustomerName) {
       const dO = safeNum(tx.deliveries?.orange); const dP = safeNum(tx.deliveries?.purple); const dC = safeNum(tx.deliveries?.crate);
       const rO = safeNum(tx.returns?.orange); const rP = safeNum(tx.returns?.purple); const rC = safeNum(tx.returns?.crate);
-      const oTW = safeNum(tx.ownTakeWash); const oTR = safeNum(tx.ownTakeRefill); const oDD = safeNum(tx.ownDeliverDone);
+      
+      const oTW = safeNum(tx.ownTakeWash) || safeNum(tx.ownDeliverWash); 
+      const oTR = safeNum(tx.ownTakeRefill) || safeNum(tx.ownDeliverRefill); 
+      const oDD = safeNum(tx.ownDeliverDone) || safeNum(tx.ownReturn);
+      const oTU = safeNum(tx.ownTakeUnpaid);
+      const oDPW = safeNum(tx.ownDeliverPayWash);
+      const oDPR = safeNum(tx.ownDeliverPayRefill);
+
+      let statusBadge = '';
+      if (tx.status === 'voided') statusBadge = `<span class="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-md font-bold inline-block">ยกเลิกแล้ว</span>`;
+      else if (tx.paymentStatus === 'paid') statusBadge = `<span class="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-md font-bold inline-block">จ่ายแล้ว</span>`;
+      else if (tx.paymentStatus === 'support') statusBadge = `<span class="text-[10px] bg-pink-100 text-pink-700 px-2 py-0.5 rounded-md font-bold inline-block">สนับสนุน(ฟรี)</span>`;
+      else statusBadge = `<span class="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-md font-bold inline-block">ค้างจ่าย</span>`;
+
+      let moneyStr = '';
+      if (tx.paymentStatus === 'support') moneyStr = `<span class="text-pink-600">สนับสนุน (ฟรี)</span>`;
+      else moneyStr = `<span class="${safeNum(tx.addedDebt) > 0 ? 'text-red-500' : 'text-blue-600'}">${safeNum(tx.amountCollected) > 0 ? `เก็บสด ${safeNum(tx.amountCollected)} ฿` : `ค้าง ${safeNum(tx.addedDebt)} ฿`}</span>`;
 
       return `
         <div class="p-4 rounded-3xl shadow-sm border transition-all ${tx.status === 'voided' ? 'bg-gray-100 border-gray-200 opacity-60' : 'bg-white border-gray-100'}">
@@ -994,7 +1071,7 @@
               ${showCustomerName ? `<h4 class="font-bold text-blue-900 mb-1 flex items-center"><i data-lucide="user" class="w-3.5 h-3.5 mr-1"></i> ${tx.customerName}</h4>` : ''}
               <p class="text-sm font-bold text-gray-500 flex items-center"><i data-lucide="history" class="w-3.5 h-3.5 mr-1"></i> ${window.formatDate(tx.timestamp)}</p>
               <div class="flex gap-2 mt-1">
-                ${tx.status === 'voided' ? `<span class="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-md font-bold inline-block">ยกเลิกแล้ว</span>` : `<span class="text-[10px] px-2 py-0.5 rounded-md font-bold inline-block ${tx.paymentStatus === 'paid' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}">${tx.paymentStatus === 'paid' ? 'จ่ายแล้ว' : 'ค้างจ่าย'}</span>`}
+                ${statusBadge}
                 <span class="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md font-bold inline-flex items-center"><i data-lucide="truck" class="w-3 h-3 mr-1"></i> ${tx.createdBy || 'ไม่ระบุ'}</span>
               </div>
             </div>
@@ -1016,12 +1093,15 @@
               ${rC > 0 ? `<p class="flex justify-between"><span>ลัง</span> <span>${rC}</span></p>` : ''}
               ${rO===0&&rP===0&&rC===0 ? `<p class="text-gray-300">-</p>` : ''}
             </div>
-            ${(oTW>0 || oTR>0 || oDD>0) ? `
+            ${(oTW>0 || oTR>0 || oDD>0 || oTU>0 || oDPW>0 || oDPR>0) ? `
               <div class="col-span-2 pt-2 border-t border-gray-50">
                 <p class="font-semibold text-[10px] text-indigo-400 mb-1 uppercase tracking-wider flex items-center"><i data-lucide="archive" class="w-3 h-3 mr-1"></i> ถังส่วนตัวลูกค้า</p>
-                ${oTW > 0 ? `<p class="flex justify-between text-indigo-700"><span>รับมา (ล้าง 5฿)</span> <span>${oTW}</span></p>` : ''}
-                ${oTR > 0 ? `<p class="flex justify-between text-indigo-700"><span>รับมา (ล้าง+เติม 15฿)</span> <span>${oTR}</span></p>` : ''}
+                ${oTW > 0 ? `<p class="flex justify-between text-indigo-700"><span>รับมา (จ่ายเลย 5฿)</span> <span>${oTW}</span></p>` : ''}
+                ${oTR > 0 ? `<p class="flex justify-between text-indigo-700"><span>รับมา (จ่ายเลย 15฿)</span> <span>${oTR}</span></p>` : ''}
+                ${oTU > 0 ? `<p class="flex justify-between text-indigo-500"><span>รับมา (รอก่อน)</span> <span>${oTU}</span></p>` : ''}
                 ${oDD > 0 ? `<p class="flex justify-between text-gray-500"><span>ส่งคืน (เสร็จแล้ว)</span> <span>${oDD}</span></p>` : ''}
+                ${oDPW > 0 ? `<p class="flex justify-between text-indigo-700"><span>ส่งคืน (เก็บ 5฿)</span> <span>${oDPW}</span></p>` : ''}
+                ${oDPR > 0 ? `<p class="flex justify-between text-indigo-700"><span>ส่งคืน (เก็บ 15฿)</span> <span>${oDPR}</span></p>` : ''}
               </div>
             ` : ''}
           </div>
@@ -1029,8 +1109,8 @@
           ${tx.note ? `<div class="mt-3 bg-yellow-50 text-yellow-800 p-2 rounded-lg text-[11px] font-medium border border-yellow-100 flex items-start"><i data-lucide="message-square" class="w-3.5 h-3.5 mr-1.5 mt-0.5 shrink-0 text-yellow-600"></i> ${tx.note}</div>` : ''}
 
           <div class="mt-3 pt-3 border-t border-gray-100 flex justify-between items-center font-bold">
-            <span class="text-gray-500 text-sm">รวมเงินบิลนี้:</span>
-            <span class="${safeNum(tx.addedDebt) > 0 ? 'text-red-500' : 'text-blue-600'}">${safeNum(tx.amountCollected) > 0 ? `เก็บสด ${safeNum(tx.amountCollected)} ฿` : `ค้าง ${safeNum(tx.addedDebt)} ฿`}</span>
+            <span class="text-gray-500 text-sm">รวมเงินบิลนี้ <span class="text-[10px] font-medium text-gray-400 ml-1">(${safeNum(tx.totalAmount)} ฿):</span></span>
+            ${moneyStr}
           </div>
         </div>
       `;
@@ -1057,20 +1137,28 @@
       const validTx = txForReport.filter(t => t.status !== 'voided');
 
       const stats = validTx.reduce((acc, tx) => {
-        acc.rev += safeNum(tx.amountCollected); 
-        acc.debt += safeNum(tx.addedDebt) > 0 ? safeNum(tx.addedDebt) : 0;
+        if (tx.paymentStatus === 'support') {
+          acc.support += safeNum(tx.totalAmount);
+        } else {
+          acc.rev += safeNum(tx.amountCollected); 
+          acc.debt += safeNum(tx.addedDebt) > 0 ? safeNum(tx.addedDebt) : 0;
+        }
+
         acc.dO += safeNum(tx.deliveries?.orange); acc.dP += safeNum(tx.deliveries?.purple); acc.dC += safeNum(tx.deliveries?.crate);
         acc.rO += safeNum(tx.returns?.orange); acc.rP += safeNum(tx.returns?.purple); acc.rC += safeNum(tx.returns?.crate);
-        acc.oW += safeNum(tx.ownTakeWash); acc.oR += safeNum(tx.ownTakeRefill); acc.oRet += safeNum(tx.ownDeliverDone);
+        
+        acc.oW += safeNum(tx.ownTakeWash) + safeNum(tx.ownDeliverWash) + safeNum(tx.ownDeliverPayWash);
+        acc.oR += safeNum(tx.ownTakeRefill) + safeNum(tx.ownDeliverRefill) + safeNum(tx.ownDeliverPayRefill);
+        acc.oRet += safeNum(tx.ownDeliverDone) + safeNum(tx.ownReturn);
+        acc.oTU += safeNum(tx.ownTakeUnpaid);
         
         const creator = tx.createdBy || 'ไม่ระบุ';
         acc.staffCash[creator] = (acc.staffCash[creator] || 0) + safeNum(tx.amountCollected);
 
         return acc;
-      }, { rev: 0, debt: 0, dO: 0, dP: 0, dC: 0, rO: 0, rP: 0, rC: 0, oW: 0, oR: 0, oRet: 0, staffCash: {} });
+      }, { rev: 0, debt: 0, support: 0, dO: 0, dP: 0, dC: 0, rO: 0, rP: 0, rC: 0, oW: 0, oR: 0, oRet: 0, oTU: 0, staffCash: {} });
 
       const totalDel = stats.dO + stats.dP + stats.dC;
-      const ownRev = (stats.oW * window.prices.ownWash) + (stats.oR * window.prices.ownRefill);
 
       const staffCashHTML = Object.keys(stats.staffCash).map(name => `
         <div class="flex justify-between items-center py-2.5 border-b border-green-100/50 last:border-0">
@@ -1118,14 +1206,18 @@
             `).join('')}
           </div>
 
-          <div class="grid grid-cols-2 gap-4 mb-4">
-            <div class="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center">
-              <span class="text-gray-500 text-[10px] font-bold mb-1 flex items-center uppercase tracking-wider"><i data-lucide="check-circle" class="w-3 h-3 mr-1 text-green-500"></i> ยอดเก็บเงินรวม</span>
-              <span class="text-2xl font-black text-green-600">${stats.rev.toLocaleString()} ฿</span>
+          <div class="grid grid-cols-3 gap-3 mb-4">
+            <div class="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center items-center text-center">
+              <span class="text-gray-500 text-[10px] font-bold mb-1 flex items-center uppercase"><i data-lucide="check-circle" class="w-3 h-3 mr-1 text-green-500"></i> เงินสด</span>
+              <span class="text-lg font-black text-green-600">${stats.rev.toLocaleString()}</span>
             </div>
-            <div class="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center">
-              <span class="text-gray-500 text-[10px] font-bold mb-1 flex items-center uppercase tracking-wider"><i data-lucide="alert-circle" class="w-3 h-3 mr-1 text-red-500"></i> ค้างจ่ายเพิ่มบิลนี้</span>
-              <span class="text-2xl font-black text-red-500">${stats.debt.toLocaleString()} ฿</span>
+            <div class="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center items-center text-center">
+              <span class="text-gray-500 text-[10px] font-bold mb-1 flex items-center uppercase"><i data-lucide="alert-circle" class="w-3 h-3 mr-1 text-red-500"></i> ค้างจ่าย</span>
+              <span class="text-lg font-black text-red-500">${stats.debt.toLocaleString()}</span>
+            </div>
+            <div class="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center items-center text-center">
+              <span class="text-gray-500 text-[10px] font-bold mb-1 flex items-center uppercase"><i data-lucide="gift" class="w-3 h-3 mr-1 text-pink-500"></i> สนับสนุน</span>
+              <span class="text-lg font-black text-pink-500">${stats.support.toLocaleString()}</span>
             </div>
           </div>
 
@@ -1159,11 +1251,11 @@
           <div class="bg-indigo-50 p-5 rounded-3xl shadow-sm border border-indigo-100 mb-4">
             <h3 class="font-bold text-indigo-900 mb-3 flex items-center justify-between">
               <span class="flex items-center"><i data-lucide="archive" class="w-4.5 h-4.5 mr-2 text-indigo-600"></i> บริการถังลูกค้า</span>
-              <span class="text-sm font-black text-indigo-700 bg-white px-2 py-1 rounded-lg shadow-sm">+${ownRev} ฿</span>
             </h3>
             <div class="space-y-1 text-xs font-bold text-indigo-800">
-              <div class="flex justify-between py-1 border-b border-indigo-100/50"><span>รับมาล้าง (5฿)</span><span>${stats.oW}</span></div>
-              <div class="flex justify-between py-1 border-b border-indigo-100/50"><span>รับมาล้าง+เติม (15฿)</span><span>${stats.oR}</span></div>
+              <div class="flex justify-between py-1 border-b border-indigo-100/50"><span>ยอดล้าง (5฿)</span><span>${stats.oW}</span></div>
+              <div class="flex justify-between py-1 border-b border-indigo-100/50"><span>ยอดล้าง+เติม (15฿)</span><span>${stats.oR}</span></div>
+              <div class="flex justify-between py-1 border-b border-indigo-100/50 text-indigo-400"><span>รับมาทำ (รอเก็บเงิน)</span><span>${stats.oTU}</span></div>
               <div class="flex justify-between py-1 text-gray-500"><span>ส่งคืนเสร็จแล้ว</span><span>${stats.oRet}</span></div>
             </div>
           </div>
@@ -1215,8 +1307,9 @@
       
       const myTx = window.transactions.filter(t => t.createdBy === window.currentUser.name && t.timestamp >= startOfDay && t.status !== 'voided');
       const myCash = myTx.reduce((acc, t) => acc + safeNum(t.amountCollected), 0);
+      const mySupport = myTx.reduce((acc, t) => acc + (t.paymentStatus === 'support' ? safeNum(t.totalAmount) : 0), 0);
       const myDels = myTx.reduce((acc, t) => acc + safeNum(t.deliveries?.orange) + safeNum(t.deliveries?.purple) + safeNum(t.deliveries?.crate), 0);
-      const myOwn = myTx.reduce((acc, t) => acc + safeNum(t.ownTakeWash) + safeNum(t.ownTakeRefill) + safeNum(t.ownDeliverDone), 0);
+      const myOwn = myTx.reduce((acc, t) => acc + safeNum(t.ownTakeWash) + safeNum(t.ownTakeRefill) + safeNum(t.ownTakeUnpaid) + safeNum(t.ownDeliverDone) + safeNum(t.ownDeliverPayWash) + safeNum(t.ownDeliverPayRefill), 0);
       const myReturns = myTx.reduce((acc, t) => acc + safeNum(t.returns?.orange) + safeNum(t.returns?.purple) + safeNum(t.returns?.crate), 0);
 
       container.innerHTML = `
@@ -1238,6 +1331,11 @@
                 <span class="text-xl font-black text-green-600">${myCash.toLocaleString()} ฿</span>
               </div>
               
+              <div class="flex justify-between items-center mb-2 pb-2 border-b border-gray-200">
+                <span class="text-sm font-bold text-gray-700">สนับสนุน (ให้ฟรี):</span>
+                <span class="text-lg font-black text-pink-500">${mySupport.toLocaleString()} ฿</span>
+              </div>
+              
               <div class="flex justify-between items-center mb-1">
                 <span class="text-xs font-bold text-gray-600"><i data-lucide="droplet" class="w-3 h-3 inline mr-1 text-blue-500"></i>น้ำโรงงาน (ส่งแล้ว):</span>
                 <span class="text-sm font-black text-blue-600">${myDels} ถัง/ลัง</span>
@@ -1255,86 +1353,6 @@
             </div>
 
             <button onclick="window.logout()" class="w-full py-3.5 bg-red-50 text-red-600 rounded-2xl font-bold text-sm active:bg-red-100 transition-colors">ออกจากระบบ</button>
-          </div>
-        </div>
-      `;
-    }
-
-    function renderAdminStock(container) {
-      if(window.currentUser.role !== 'admin') {
-        window.switchView('list'); return;
-      }
-
-      container.innerHTML = `
-        <div class="p-4 max-w-md mx-auto pb-24">
-          <div class="mb-6 flex items-end bg-slate-800 text-white p-5 rounded-b-3xl shadow-md -mt-4 -mx-4 pt-8 justify-between">
-            <div><h1 class="text-2xl font-black tracking-tight flex items-center"><i data-lucide="database" class="w-6 h-6 mr-2"></i> จัดการโรงงาน</h1><p class="text-xs text-slate-300 font-bold mt-1">ผู้ดูแลระบบ: ${window.currentUser.name}</p></div>
-            <button onclick="window.logout()" class="p-2 bg-red-500/20 text-red-300 rounded-xl hover:bg-red-500/40"><i data-lucide="log-out" class="w-5 h-5"></i></button>
-          </div>
-
-          <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-4">
-            <div class="flex justify-between items-center mb-4">
-              <h3 class="font-bold text-gray-800 flex items-center"><i data-lucide="package-check" class="w-5 h-5 mr-2 text-blue-600"></i> สต๊อกพร้อมขาย (กลาง)</h3>
-            </div>
-            <p class="text-[10px] text-gray-400 mb-3 leading-tight bg-gray-50 p-2 rounded-lg">* เมื่อพนักงานกดบันทึกการส่งน้ำ ยอดในสต๊อกนี้จะถูกหักออกอัตโนมัติ</p>
-            <div class="space-y-3">
-              ${['orange', 'purple', 'crate'].map(item => `
-                <div class="flex justify-between items-center p-3 rounded-2xl border ${item==='orange'?'bg-orange-50/50 border-orange-100':item==='purple'?'bg-purple-50/50 border-purple-100':'bg-amber-50/50 border-amber-100'}">
-                  <div class="flex items-center font-bold text-sm ${item==='orange'?'text-orange-700':item==='purple'?'text-purple-700':'text-amber-800'}">
-                    <i data-lucide="${item==='crate'?'package':'droplet'}" class="w-5 h-5 mr-2"></i> ${item==='orange'?'ถังส้ม':item==='purple'?'ถังม่วง':'แบบลัง'}
-                  </div>
-                  <div class="flex items-center gap-1">
-                    <button onclick="window.updateGlobalStock('${item}', -1)" class="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-600 active:scale-95 shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
-                    <input type="number" id="global-stock-${item}" inputmode="numeric" pattern="[0-9]*" value="${window.globalStock[item] || 0}" onchange="window.setGlobalStock('${item}', this.value)" onfocus="this.select()" class="w-14 text-center font-black text-2xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
-                    <button onclick="window.updateGlobalStock('${item}', 1)" class="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-600 active:scale-95 shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-
-          <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
-            <h3 class="font-bold text-gray-800 mb-4 flex items-center"><i data-lucide="users" class="w-5 h-5 mr-2 text-indigo-600"></i> จัดการพนักงาน</h3>
-            
-            <form onsubmit="window.saveStaff(event)" class="mb-4 bg-indigo-50 p-4 rounded-2xl border ${window.editingUserId ? 'border-indigo-400 shadow-md' : 'border-indigo-100'}">
-              <div class="flex justify-between items-center mb-2">
-                <h4 class="text-xs font-bold text-indigo-800">${window.editingUserId ? 'แก้ไขข้อมูลพนักงาน' : 'เพิ่มชื่อพนักงานใหม่'}</h4>
-                ${window.editingUserId ? `<button type="button" onclick="window.cancelEditStaff()" class="text-[10px] text-red-500 font-bold bg-red-100 px-2 py-0.5 rounded active:bg-red-200">ยกเลิก</button>` : ''}
-              </div>
-              <div class="grid grid-cols-2 gap-2 mb-2">
-                <input type="text" id="staff-name-input" value="${window.newUserName}" oninput="window.newUserName=this.value; window.render();" placeholder="ชื่อเล่น/ชื่อจริง" class="px-3 py-2 rounded-xl border border-white focus:outline-none text-sm font-bold shadow-sm outline-none" required>
-                <input type="password" id="staff-pin-input" pattern="[0-9]*" inputmode="numeric" value="${window.newUserPin}" oninput="window.newUserPin=this.value; window.render();" placeholder="PIN 4 หลัก" class="px-3 py-2 rounded-xl border border-white focus:outline-none text-sm font-bold shadow-sm text-center tracking-widest outline-none" required>
-              </div>
-              <div class="flex gap-2">
-                <select id="staff-role-input" onchange="window.newUserRole=this.value; window.render();" class="flex-1 px-3 py-2 rounded-xl border border-white text-sm font-bold shadow-sm text-gray-600 bg-white outline-none">
-                  <option value="staff" ${window.newUserRole==='staff'?'selected':''}>พนักงาน (Staff)</option>
-                  <option value="admin" ${window.newUserRole==='admin'?'selected':''}>เจ้าของ (Admin)</option>
-                </select>
-                <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md active:scale-95 w-20 flex justify-center items-center">${window.editingUserId ? 'บันทึก' : 'เพิ่ม'}</button>
-              </div>
-            </form>
-
-            <div class="space-y-2">
-              ${window.users.map(u => `
-                <div class="flex justify-between items-center py-2 px-3 bg-gray-50 rounded-xl border ${window.editingUserId === u.id ? 'border-indigo-400 bg-indigo-50' : 'border-gray-100'}">
-                  <div>
-                    <span class="font-bold text-gray-800 text-sm">${u.name}</span>
-                    <span class="text-[10px] ml-2 px-2 py-0.5 rounded-full font-bold ${u.role === 'admin' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}">${u.role === 'admin' ? 'Admin' : 'Staff'}</span>
-                  </div>
-                  <div class="flex items-center gap-2">
-                    <span class="text-[10px] font-mono text-gray-400 mr-1 border bg-white px-1.5 rounded">PIN: ${u.pin}</span>
-                    <button onclick="window.editStaff('${u.id}')" class="p-1.5 bg-blue-50 text-blue-600 rounded-lg active:bg-blue-100"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i></button>
-                    <button onclick="window.deleteStaff('${u.id}')" class="p-1.5 bg-red-50 text-red-600 rounded-lg active:bg-red-100"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-
-          <div class="bg-red-50 p-5 rounded-3xl shadow-sm border border-red-100 mt-4">
-            <h3 class="font-bold text-red-800 mb-2 flex items-center"><i data-lucide="alert-triangle" class="w-5 h-5 mr-2"></i> โซนล้างข้อมูล (Admin)</h3>
-            <p class="text-xs text-red-600 mb-4 font-medium leading-relaxed">การกระทำนี้จะทำการ <b class="font-black text-red-800">"ล้างประวัติบิลทั้งหมดในอดีต"</b> ออกจากระบบอย่างถาวร เพื่อเคลียร์พื้นที่ <br>*(ยอดค้างชำระปัจจุบัน และรายชื่อลูกค้า จะไม่หายไป)*</p>
-            <button onclick="window.clearAllTransactions()" class="w-full bg-red-600 text-white font-bold py-3.5 rounded-2xl shadow-md active:scale-95 transition-transform flex justify-center items-center"><i data-lucide="trash-2" class="w-4 h-4 mr-2"></i> ล้างประวัติบิลทั้งหมด</button>
           </div>
         </div>
       `;
