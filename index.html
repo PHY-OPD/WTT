@@ -56,7 +56,7 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, increment, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, increment, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyADKt7-BEYafDN7gx16CCnMah_BKV-GJmQ",
@@ -64,8 +64,7 @@
       projectId: "wttt-c46a5",
       storageBucket: "wttt-c46a5.firebasestorage.app",
       messagingSenderId: "372907513409",
-      appId: "1:372907513409:web:3501b786049ecdd20d18c0",
-      measurementId: "G-DY53QB2KBR"
+      appId: "1:372907513409:web:3501b786049ecdd20d18c0"
     };
 
     const app = initializeApp(firebaseConfig);
@@ -313,7 +312,7 @@
           window.showToast('แก้ไขข้อมูลพนักงานสำเร็จ');
         } else {
           await addDoc(collection(db, "users"), { name: window.newUserName, pin: window.newUserPin, role: window.newUserRole });
-          window.showToast('เพิ่มพนักงานสำเร็จ');
+          window.showToast('เพิ่มผู้ใช้งานสำเร็จ');
         }
         window.cancelEditStaff();
       } catch(error) { 
@@ -341,7 +340,7 @@
       if (id === window.currentUser.id) return window.showToast('ไม่สามารถลบบัญชีตัวเองได้', 'error');
       const u = window.users.find(x => x.id === id);
       if(!u) return;
-      window.showModal('ลบพนักงาน?', `คุณต้องการลบพนักงานชื่อ "${u.name}" ใช่หรือไม่?`, 'ลบข้อมูล', true, async () => {
+      window.showModal('ลบพนักงาน?', `คุณต้องการลบผู้ใช้งานชื่อ "${u.name}" ใช่หรือไม่?`, 'ลบข้อมูล', true, async () => {
         try {
           await deleteDoc(doc(db, "users", id));
           window.showToast('ลบพนักงานสำเร็จ');
@@ -570,7 +569,7 @@
       if (!tx) return;
 
       window.showModal('ต้องการยกเลิกบิลนี้?', 'ระบบจะดึงสต๊อกและยอดหนี้กลับ (เฉพาะผู้ดูแลระบบ)', 'ยืนยันยกเลิกบิล', true, async () => {
-        if(!['admin', 'super_admin'].includes(window.currentUser.role)) return window.showToast('สิทธิ์ไม่เพียงพอ แจ้งแอดมินเพื่อยกเลิก', 'error');
+        if(!['admin', 'super_admin'].includes(window.currentUser.role)) return window.showToast('สิทธิ์ไม่เพียงพอ แจ้งผู้ดูแลระบบเพื่อยกเลิก', 'error');
 
         try {
           const batch = writeBatch(db);
@@ -622,7 +621,7 @@
         'ส่งน้ำ(ส้ม)', 'รับคืน(ส้ม)', 'ส่งน้ำ(ม่วง)', 'รับคืน(ม่วง)', 'ส่งน้ำ(ลัง)', 'รับคืน(ลัง)', 
         'รับมาทำ(จ่ายเลย5฿)', 'รับมาทำ(จ่ายเลย15฿)', 'รับมาทำ(ยังไม่เก็บเงิน)', 
         'ส่งคืน(เก็บเงิน5฿)', 'ส่งคืน(เก็บเงิน15฿)', 'ส่งคืน(จ่ายเงินแล้ว)',
-        'มูลค่าบิล(บาท)', 'เงินสดที่เก็บ(บาท)', 'ค้างจ่ายเพิ่ม(บาท)', 'หมายเหตุ'
+        'ยอดบิลรวม(บาท)', 'เงินสดที่เก็บ(บาท)', 'ค้างจ่ายเพิ่ม(บาท)', 'หมายเหตุ'
       ];
       
       const rows = txList.map(tx => {
@@ -698,7 +697,7 @@
               <label class="block text-gray-700 text-sm font-bold mb-2">เลือกผู้ใช้งาน</label>
               <select id="login-user-select" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-lg font-medium bg-white outline-none">
                 <option value="">-- เลือกชื่อ --</option>
-                <option value="${ADMIN_ACCOUNT.id}" class="font-bold text-red-600">👑 ผู้ดูแลระบบสูงสุด (Super Admin)</option>
+                <option value="${SUPER_ADMIN_ACCOUNT.id}" class="font-bold text-red-600">👑 ผู้ดูแลระบบสูงสุด (Super Admin)</option>
                 ${window.users.map(u => `<option value="${u.id}">${u.name} (${u.role === 'admin' ? 'แอดมิน' : 'พนักงาน'})</option>`).join('')}
               </select>
             </div>
@@ -1368,7 +1367,7 @@
       container.innerHTML = `
         <div class="p-4 max-w-md mx-auto pb-24">
           <div class="mb-6 flex items-end bg-slate-800 text-white p-5 rounded-b-3xl shadow-md -mt-4 -mx-4 pt-8 justify-between">
-            <div><h1 class="text-2xl font-black tracking-tight flex items-center"><i data-lucide="database" class="w-6 h-6 mr-2"></i> จัดการโรงงาน</h1><p class="text-xs text-slate-300 font-bold mt-1">ผู้ดูแลระบบ: ${window.currentUser.name}</p></div>
+            <div><h1 class="text-2xl font-black tracking-tight flex items-center"><i data-lucide="database" class="w-6 h-6 mr-2"></i> จัดการโรงงาน</h1><p class="text-xs text-slate-300 font-bold mt-1">บทบาท: ${window.currentUser.name}</p></div>
             <button onclick="window.logout()" class="p-2 bg-red-500/20 text-red-300 rounded-xl hover:bg-red-500/40"><i data-lucide="log-out" class="w-5 h-5"></i></button>
           </div>
 
@@ -1415,6 +1414,13 @@
             </form>
 
             <div class="space-y-2">
+              <div class="flex justify-between items-center py-2.5 px-3 bg-red-50/60 rounded-xl border border-red-100">
+                <div>
+                  <span class="font-black text-red-900 text-sm">👑 ผู้ดูแลระบบสูงสุด</span>
+                </div>
+                <span class="text-[10px] font-mono text-gray-400 border bg-white px-2 py-0.5 rounded">PIN: ****</span>
+              </div>
+
               ${window.users.map(u => `
                 <div class="flex justify-between items-center py-2 px-3 bg-gray-50 rounded-xl border ${window.editingUserId === u.id ? 'border-indigo-400 bg-indigo-50' : 'border-gray-100'}">
                   <div>
@@ -1422,7 +1428,7 @@
                     <span class="text-[10px] ml-2 px-2 py-0.5 rounded-full font-bold ${u.role === 'admin' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}">${u.role === 'admin' ? 'Admin' : 'Staff'}</span>
                   </div>
                   <div class="flex items-center gap-2">
-                    <span class="text-[10px] font-mono text-gray-400 mr-1 border bg-white px-1.5 rounded">PIN: ${u.pin}</span>
+                    <span class="text-[10px] font-mono text-gray-400 mr-1 border bg-white px-1.5 rounded">PIN: ${u.role === 'admin' && window.currentUser.role !== 'super_admin' ? '****' : u.pin}</span>
                     <button onclick="window.editStaff('${u.id}')" class="p-1.5 bg-blue-50 text-blue-600 rounded-lg active:bg-blue-100"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i></button>
                     <button onclick="window.deleteStaff('${u.id}')" class="p-1.5 bg-red-50 text-red-600 rounded-lg active:bg-red-100"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
                   </div>
@@ -1433,7 +1439,7 @@
 
           ${window.currentUser.role === 'super_admin' ? `
           <div class="bg-red-50 p-5 rounded-3xl shadow-sm border border-red-100 mt-4">
-            <h3 class="font-bold text-red-800 mb-2 flex items-center"><i data-lucide="alert-triangle" class="w-5 h-5 mr-2"></i> โซนล้างข้อมูล (เฉพาะผู้ดูแลระบบสูงสุด)</h3>
+            <h3 class="font-bold text-red-800 mb-2 flex items-center"><i data-lucide="alert-triangle" class="w-5 h-5 mr-2"></i> โซนล้างข้อมูล (Super Admin)</h3>
             <p class="text-xs text-red-600 mb-4 font-medium leading-relaxed">การกระทำนี้จะทำการ <b class="font-black text-red-800">"ล้างประวัติบิลทั้งหมดในอดีต"</b> ออกจากระบบอย่างถาวร เพื่อเคลียร์พื้นที่ <br>*(ยอดค้างชำระปัจจุบัน และรายชื่อลูกค้า จะไม่หายไป)*</p>
             <button onclick="window.clearAllTransactions()" class="w-full bg-red-600 text-white font-bold py-3.5 rounded-2xl shadow-md active:scale-95 transition-transform flex justify-center items-center"><i data-lucide="trash-2" class="w-4 h-4 mr-2"></i> ล้างประวัติบิลทั้งหมด</button>
           </div>
@@ -1441,7 +1447,6 @@
         </div>
       `;
     }
-
   </script>
 </body>
 </html>
