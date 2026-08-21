@@ -94,8 +94,8 @@
     window.ownDeliverPayWash = 0;
     window.ownDeliverPayRefill = 0;
     window.ownBottlePayMode = 'pay_now'; 
-    window.isRemoteArea = false; // ตัวเลือกพื้นที่ห่างไกล
-    window.cashReceived = 0;     // รับเงินสดมาเพื่อทอน
+    window.isRemoteArea = false;
+    window.cashReceived = ''; // เปลี่ยนเป็น string ว่างเริ่มต้น
     window.paymentStatus = 'paid';
     window.txNote = '';
 
@@ -170,7 +170,10 @@
       window.switchView('login');
     }
 
-    const safeNum = (val) => (isNaN(Number(val)) ? 0 : Number(val));
+    const safeNum = (val) => {
+      const parsed = parseInt(val, 10);
+      return isNaN(parsed) ? 0 : parsed;
+    };
     window.safeNum = safeNum;
 
     window.formatDate = (ts) => {
@@ -505,7 +508,7 @@
       window.ownTakeUnpaid = 0; window.ownDeliverPayWash = 0; window.ownDeliverPayRefill = 0;
       window.ownBottlePayMode = 'pay_now'; 
       window.isRemoteArea = false;
-      window.cashReceived = 0;
+      window.cashReceived = '';
       window.paymentStatus = 'paid'; window.txNote = '';
       window.switchView('delivery');
     };
@@ -513,9 +516,6 @@
     window.submitDelivery = async function() {
       const cust = window.customers.find(c => c.id === window.selectedCustomerId);
       if (!cust) return window.showToast('ไม่พบข้อมูลลูกค้า', 'error');
-
-      const btn = document.getElementById('btn-submit-delivery');
-      if(btn) btn.innerHTML = '<div class="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>';
 
       const pOrange = window.prices.orange + (window.isRemoteArea ? 5 : 0);
       const pPurple = window.prices.purple + (window.isRemoteArea ? 5 : 0);
@@ -544,6 +544,9 @@
       const newOwnBottle = Math.max(0, safeNum(cust.stockOwnBottle) 
         + safeNum(window.ownTakeWash) + safeNum(window.ownTakeRefill) + safeNum(window.ownTakeUnpaid) 
         - safeNum(window.ownDeliverDone) - safeNum(window.ownDeliverPayWash) - safeNum(window.ownDeliverPayRefill));
+
+      const btn = document.getElementById('btn-submit-delivery');
+      if(btn) btn.innerHTML = '<div class="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>';
 
       try {
         const batch = writeBatch(db);
@@ -594,7 +597,6 @@
             const revOwn = Math.max(0, safeNum(cust.stockOwnBottle) 
               - safeNum(tx.ownTakeWash) - safeNum(tx.ownTakeRefill) - safeNum(tx.ownTakeUnpaid) 
               + safeNum(tx.ownDeliverDone) + safeNum(tx.ownDeliverPayWash) + safeNum(tx.ownDeliverPayRefill)
-              + safeNum(tx.ownDeliverWash) + safeNum(tx.ownDeliverRefill) - safeNum(tx.ownReturn) 
             );
             
             batch.update(doc(db, "customers", cust.id), { debt: revDebt, stockOrange: revOrange, stockPurple: revPurple, stockCrate: revCrate, stockOwnBottle: revOwn });
@@ -641,8 +643,8 @@
           `"${window.formatDate(tx.timestamp)}"`, `"${tx.customerName}"`, `"${tx.zone}"`, `"${tx.createdBy || '-'}"`, 
           tx.status === 'voided' ? 'ยกเลิก' : 'ปกติ', paymentStr, tx.isRemoteArea ? 'ใช่ (+ค่าส่ง)' : 'ปกติ',
           safeNum(tx.deliveries?.orange), safeNum(tx.returns?.orange), safeNum(tx.deliveries?.purple), safeNum(tx.returns?.purple), safeNum(tx.deliveries?.crate), safeNum(tx.returns?.crate), 
-          (safeNum(tx.ownTakeWash) + safeNum(tx.ownDeliverWash)), (safeNum(tx.ownTakeRefill) + safeNum(tx.ownDeliverRefill)), safeNum(tx.ownTakeUnpaid),
-          safeNum(tx.ownDeliverPayWash), safeNum(tx.ownDeliverPayRefill), (safeNum(tx.ownDeliverDone) + safeNum(tx.ownReturn)),
+          safeNum(tx.ownTakeWash), safeNum(tx.ownTakeRefill), safeNum(tx.ownTakeUnpaid),
+          safeNum(tx.ownDeliverPayWash), safeNum(tx.ownDeliverPayRefill), safeNum(tx.ownDeliverDone),
           safeNum(tx.totalAmount), safeNum(tx.amountCollected), safeNum(tx.addedDebt), `"${tx.note || ''}"`
         ].join(',');
       });
@@ -840,15 +842,15 @@
                 <div class="grid grid-cols-3 gap-2">
                   <div>
                     <label class="block text-gray-700 text-[11px] font-bold mb-1">ค้างถังส้ม</label>
-                    <input type="number" id="form-orange" value="${window.formStockOrange}" onchange="window.formStockOrange=this.value" class="w-full px-3 py-2 rounded-xl border border-orange-200 focus:ring-2 focus:ring-orange-500 text-sm font-bold bg-orange-50 text-orange-700 outline-none" />
+                    <input type="number" id="form-orange" value="${window.formStockOrange}" onchange="window.formStockOrange=this.value" class="w-full px-3 py-2.5 rounded-xl border border-orange-200 focus:ring-2 focus:ring-orange-500 text-sm font-bold bg-orange-50 text-orange-700 outline-none" />
                   </div>
                   <div>
                     <label class="block text-gray-700 text-[11px] font-bold mb-1">ค้างถังม่วง</label>
-                    <input type="number" id="form-purple" value="${window.formStockPurple}" onchange="window.formStockPurple=this.value" class="w-full px-3 py-2 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500 text-sm font-bold bg-purple-50 text-purple-700 outline-none" />
+                    <input type="number" id="form-purple" value="${window.formStockPurple}" onchange="window.formStockPurple=this.value" class="w-full px-3 py-2.5 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500 text-sm font-bold bg-purple-50 text-purple-700 outline-none" />
                   </div>
                   <div>
                     <label class="block text-gray-700 text-[11px] font-bold mb-1">ค้างลัง</label>
-                    <input type="number" id="form-crate" value="${window.formStockCrate}" onchange="window.formStockCrate=this.value" class="w-full px-3 py-2 rounded-xl border border-amber-200 focus:ring-2 focus:ring-amber-500 text-sm font-bold bg-amber-50 text-amber-700 outline-none" />
+                    <input type="number" id="form-crate" value="${window.formStockCrate}" onchange="window.formStockCrate=this.value" class="w-full px-3 py-2.5 rounded-xl border border-amber-200 focus:ring-2 focus:ring-amber-500 text-sm font-bold bg-amber-50 text-amber-700 outline-none" />
                   </div>
                 </div>
                 <p class="text-[10px] text-red-500 mt-2 font-semibold">* ตัวเลขนี้จะไปทับข้อมูลปัจจุบันของลูกค้าทันที</p>
@@ -874,10 +876,10 @@
       const calcTotal = factoryTotal + ownServiceTotal;
 
       const totalToCollect = window.paymentStatus === 'support' ? 0 : calcTotal + safeNum(cust.debt);
-      const changeAmount = window.cashReceived > 0 ? (window.cashReceived - totalToCollect) : 0;
+      const changeAmount = window.cashReceived !== '' ? (safeNum(window.cashReceived) - totalToCollect) : 0;
 
       container.innerHTML = `
-        <div class="pb-36 relative">
+        <div class="pb-44 relative">
           <div class="bg-white px-4 py-4 shadow-sm sticky top-0 z-10 flex items-center justify-between border-b border-gray-100">
             <div class="flex items-center">
               <button onclick="window.switchView('list')" class="mr-3 p-2 bg-gray-50 rounded-full text-gray-600 active:bg-gray-200"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
@@ -896,7 +898,7 @@
 
           <div class="p-4 space-y-4">
             
-            <!-- ตัวเลือกพื้นที่ห่างไกล -->
+            <!-- พื้นที่ห่างไกล -->
             <div class="flex items-center justify-between p-3.5 bg-amber-50/80 border border-amber-200 rounded-2xl">
               <div class="flex items-center">
                 <i data-lucide="map-pin" class="w-5 h-5 text-amber-600 mr-2 shrink-0"></i>
@@ -926,7 +928,7 @@
                   </div>
                   <div class="flex items-center gap-1">
                     <button onclick="window.updateQty('deliveries', '${item}', -1)" class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 active:bg-gray-200 shrink-0"><i data-lucide="minus" class="w-5 h-5"></i></button>
-                    <input type="number" id="del-${item}-input" inputmode="numeric" pattern="[0-9]*" value="${window.deliveries[item]}" onchange="window.setQty('deliveries', '${item}', this.value)" onfocus="this.select()" class="w-12 text-center font-black text-2xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="del-${item}-input" value="${window.deliveries[item]}" onchange="window.setQty('deliveries', '${item}', this.value)" onfocus="this.select()" class="w-12 text-center font-black text-2xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
                     <button onclick="window.updateQty('deliveries', '${item}', 1)" class="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-md ${item==='orange'?'bg-orange-500':item==='purple'?'bg-purple-600':'bg-amber-700'} shrink-0"><i data-lucide="plus" class="w-5 h-5"></i></button>
                   </div>
                 </div>
@@ -951,7 +953,7 @@
                   <span class="font-bold text-gray-700 text-[13px] leading-tight w-1/2">รับถังมาล้าง+เติม<br><span class="text-indigo-500 text-[11px]">(เก็บเงินเลย 15฿)</span></span>
                   <div class="flex items-center gap-1">
                     <button onclick="window.updateOwnQty('ownTakeRefill', -1)" class="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
-                    <input type="number" id="own-take-refill-input" inputmode="numeric" pattern="[0-9]*" value="${window.ownTakeRefill}" onchange="window.setOwnQty('ownTakeRefill', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="own-take-refill-input" value="${window.ownTakeRefill}" onchange="window.setOwnQty('ownTakeRefill', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
                     <button onclick="window.updateOwnQty('ownTakeRefill', 1)" class="w-9 h-9 rounded-full bg-indigo-500 text-white shadow-md flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
                   </div>
                 </div>
@@ -959,7 +961,7 @@
                   <span class="font-bold text-gray-700 text-[13px] leading-tight w-1/2">รับถังมาล้างอย่างเดียว<br><span class="text-indigo-500 text-[11px]">(เก็บเงินเลย 5฿)</span></span>
                   <div class="flex items-center gap-1">
                     <button onclick="window.updateOwnQty('ownTakeWash', -1)" class="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
-                    <input type="number" id="own-take-wash-input" inputmode="numeric" pattern="[0-9]*" value="${window.ownTakeWash}" onchange="window.setOwnQty('ownTakeWash', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="own-take-wash-input" value="${window.ownTakeWash}" onchange="window.setOwnQty('ownTakeWash', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
                     <button onclick="window.updateOwnQty('ownTakeWash', 1)" class="w-9 h-9 rounded-full bg-indigo-400 text-white shadow-md flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
                   </div>
                 </div>
@@ -967,7 +969,7 @@
                   <span class="font-bold text-gray-600 text-[13px]"><i data-lucide="corner-up-left" class="w-3 h-3 inline mr-1 text-gray-400"></i>ส่งคืนถังลูกค้า (ทำเสร็จแล้ว)</span>
                   <div class="flex items-center gap-1">
                     <button onclick="window.updateOwnQty('ownDeliverDone', -1)" class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
-                    <input type="number" id="own-deliver-done-input" inputmode="numeric" pattern="[0-9]*" value="${window.ownDeliverDone}" onchange="window.setOwnQty('ownDeliverDone', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="own-deliver-done-input" value="${window.ownDeliverDone}" onchange="window.setOwnQty('ownDeliverDone', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
                     <button onclick="window.updateOwnQty('ownDeliverDone', 1)" class="w-8 h-8 rounded-full bg-gray-500 text-white shadow-md flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
                   </div>
                 </div>
@@ -976,7 +978,7 @@
                   <span class="font-bold text-gray-700 text-[13px] leading-tight w-1/2">รับถังมาทำ<br><span class="text-indigo-500 text-[11px]">(ยังไม่เก็บเงิน รอตอนส่ง)</span></span>
                   <div class="flex items-center gap-1">
                     <button onclick="window.updateOwnQty('ownTakeUnpaid', -1)" class="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
-                    <input type="number" id="own-take-unpaid-input" inputmode="numeric" pattern="[0-9]*" value="${window.ownTakeUnpaid}" onchange="window.setOwnQty('ownTakeUnpaid', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="own-take-unpaid-input" value="${window.ownTakeUnpaid}" onchange="window.setOwnQty('ownTakeUnpaid', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
                     <button onclick="window.updateOwnQty('ownTakeUnpaid', 1)" class="w-9 h-9 rounded-full bg-indigo-300 text-white shadow-md flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
                   </div>
                 </div>
@@ -984,7 +986,7 @@
                   <span class="font-bold text-gray-600 text-[13px] leading-tight w-1/2"><i data-lucide="corner-up-left" class="w-3 h-3 inline mr-1 text-gray-400"></i>ส่งคืนลูกค้า<br><span class="text-indigo-500 text-[11px] ml-5">(เก็บค่าล้าง+เติม 15฿)</span></span>
                   <div class="flex items-center gap-1">
                     <button onclick="window.updateOwnQty('ownDeliverPayRefill', -1)" class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
-                    <input type="number" id="own-deliver-pay-refill-input" inputmode="numeric" pattern="[0-9]*" value="${window.ownDeliverPayRefill}" onchange="window.setOwnQty('ownDeliverPayRefill', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="own-deliver-pay-refill-input" value="${window.ownDeliverPayRefill}" onchange="window.setOwnQty('ownDeliverPayRefill', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
                     <button onclick="window.updateOwnQty('ownDeliverPayRefill', 1)" class="w-8 h-8 rounded-full bg-indigo-500 text-white shadow-md flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
                   </div>
                 </div>
@@ -992,7 +994,7 @@
                   <span class="font-bold text-gray-600 text-[13px] leading-tight w-1/2"><i data-lucide="corner-up-left" class="w-3 h-3 inline mr-1 text-gray-400 opacity-0"></i>ส่งคืนลูกค้า<br><span class="text-indigo-500 text-[11px] ml-5">(เก็บค่าล้าง 5฿)</span></span>
                   <div class="flex items-center gap-1">
                     <button onclick="window.updateOwnQty('ownDeliverPayWash', -1)" class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
-                    <input type="number" id="own-deliver-pay-wash-input" inputmode="numeric" pattern="[0-9]*" value="${window.ownDeliverPayWash}" onchange="window.setOwnQty('ownDeliverPayWash', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="own-deliver-pay-wash-input" value="${window.ownDeliverPayWash}" onchange="window.setOwnQty('ownDeliverPayWash', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
                     <button onclick="window.updateOwnQty('ownDeliverPayWash', 1)" class="w-8 h-8 rounded-full bg-indigo-400 text-white shadow-md flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
                   </div>
                 </div>
@@ -1014,7 +1016,7 @@
                     </div>
                     <div class="flex items-center gap-1">
                       <button onclick="window.updateQty('returns', '${item}', -1)" class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 active:bg-gray-200 shrink-0"><i data-lucide="minus" class="w-5 h-5"></i></button>
-                      <input type="number" id="ret-${item}-input" inputmode="numeric" pattern="[0-9]*" value="${window.returns[item]}" onchange="window.setQty('returns', '${item}', this.value)" onfocus="this.select()" class="w-12 text-center font-black text-2xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                      <input type="text" inputmode="numeric" pattern="[0-9]*" id="ret-${item}-input" value="${window.returns[item]}" onchange="window.setQty('returns', '${item}', this.value)" onfocus="this.select()" class="w-12 text-center font-black text-2xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
                       <button onclick="window.updateQty('returns', '${item}', 1)" class="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-md ${item==='orange'?'bg-orange-400':item==='purple'?'bg-purple-400':'bg-amber-600'} shrink-0"><i data-lucide="plus" class="w-5 h-5"></i></button>
                     </div>
                   </div>
@@ -1028,7 +1030,7 @@
               <input type="text" id="tx-note-input" value="${window.txNote}" oninput="window.txNote=this.value" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-sm outline-none" placeholder="เช่น โอนเงิน, ฝากไว้หน้าบ้าน..." />
             </div>
 
-            <!-- สถานะเก็บเงิน -->
+            <!-- สถานะเก็บเงิน และ เครื่องคิดเลขทอนเงิน -->
             <div class="bg-white rounded-3xl shadow-sm p-4 border border-gray-100">
               <h3 class="font-bold text-gray-800 mb-3 flex items-center"><i data-lucide="credit-card" class="w-4 h-4 mr-2 text-blue-500"></i> สถานะเก็บเงิน</h3>
               <div class="flex gap-2">
@@ -1037,25 +1039,27 @@
                 <button onclick="window.paymentStatus='support'; window.render();" class="flex-1 py-3 rounded-xl font-bold flex flex-col items-center border-2 transition-all ${window.paymentStatus === 'support' ? 'bg-pink-50 text-pink-600 border-pink-500 shadow-sm' : 'bg-white text-gray-400 border-gray-100'}"><i data-lucide="gift" class="w-4 h-4 mb-1"></i> สนับสนุน</button>
               </div>
 
-              <!-- เครื่องคิดเลขทอนเงิน (แสดงเมื่อเลือก จ่ายแล้ว) -->
               ${window.paymentStatus === 'paid' && totalToCollect > 0 ? `
-                <div class="mt-4 pt-3 border-t border-gray-100">
-                  <div class="flex justify-between items-center mb-2">
-                    <span class="text-xs font-bold text-gray-600 flex items-center"><i data-lucide="calculator" class="w-3.5 h-3.5 mr-1 text-blue-500"></i> คำนวณเงินทอน</span>
-                    <span class="text-xs text-gray-400">ยอดต้องจ่าย ${totalToCollect} ฿</span>
+                <div class="mt-4 pt-4 border-t border-gray-100">
+                  <div class="flex justify-between items-center mb-3">
+                    <span class="text-sm font-bold text-gray-800 flex items-center"><i data-lucide="calculator" class="w-4 h-4 mr-1.5 text-blue-500"></i> คำนวณเงินทอน</span>
+                    <span class="text-xs text-gray-500 font-bold bg-gray-100 px-2 py-1 rounded-md">ยอดต้องจ่าย ${totalToCollect} ฿</span>
                   </div>
                   
-                  <div class="flex gap-2 mb-2">
-                    <input type="number" id="cash-received-input" inputmode="numeric" placeholder="รับเงินมา..." value="${window.cashReceived || ''}" oninput="window.cashReceived=safeNum(this.value); window.render();" class="flex-1 px-3 py-2 text-sm font-bold rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50" />
-                    <button type="button" onclick="window.cashReceived=${totalToCollect}; window.render();" class="px-2.5 py-1 text-xs font-bold rounded-lg border border-gray-200 bg-white text-gray-600 active:bg-gray-100">พอดี</button>
-                    <button type="button" onclick="window.cashReceived=100; window.render();" class="px-2.5 py-1 text-xs font-bold rounded-lg border border-gray-200 bg-white text-gray-600 active:bg-gray-100">100</button>
-                    <button type="button" onclick="window.cashReceived=500; window.render();" class="px-2.5 py-1 text-xs font-bold rounded-lg border border-gray-200 bg-white text-gray-600 active:bg-gray-100">500</button>
-                    <button type="button" onclick="window.cashReceived=1000; window.render();" class="px-2.5 py-1 text-xs font-bold rounded-lg border border-gray-200 bg-white text-gray-600 active:bg-gray-100">1,000</button>
+                  <div class="mb-3">
+                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="cash-received-input" placeholder="พิมพ์จำนวนเงินที่รับมา..." value="${window.cashReceived}" oninput="window.cashReceived=this.value ? safeNum(this.value) : ''; window.render();" class="w-full px-4 py-3 text-lg font-bold rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50 text-center mb-2" />
+                    
+                    <div class="grid grid-cols-4 gap-2">
+                      <button type="button" onclick="window.cashReceived=${totalToCollect}; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-blue-50 active:text-blue-600 active:border-blue-200 transition-colors">พอดี</button>
+                      <button type="button" onclick="window.cashReceived=100; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-blue-50 active:text-blue-600 active:border-blue-200 transition-colors">100</button>
+                      <button type="button" onclick="window.cashReceived=500; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-blue-50 active:text-blue-600 active:border-blue-200 transition-colors">500</button>
+                      <button type="button" onclick="window.cashReceived=1000; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-blue-50 active:text-blue-600 active:border-blue-200 transition-colors">1,000</button>
+                    </div>
                   </div>
 
-                  ${window.cashReceived > 0 ? `
-                    <div class="p-2.5 rounded-xl text-center font-bold text-sm ${changeAmount >= 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-600 border border-red-200'}">
-                      ${changeAmount >= 0 ? `💵 ทอนเงิน: <span class="text-xl font-black text-emerald-700">${changeAmount.toLocaleString()} ฿</span>` : `⚠️ เงินไม่พอ: ขาดอีก ${Math.abs(changeAmount).toLocaleString()} ฿`}
+                  ${window.cashReceived !== '' ? `
+                    <div class="p-3.5 rounded-xl text-center font-bold text-base shadow-inner ${changeAmount >= 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-600 border border-red-200'}">
+                      ${changeAmount >= 0 ? `💵 ทอนเงิน: <span class="text-2xl font-black text-emerald-600 ml-1">${changeAmount.toLocaleString()} ฿</span>` : `⚠️ เงินไม่พอ: ขาดอีก <span class="text-xl font-black text-red-600 ml-1">${Math.abs(changeAmount).toLocaleString()} ฿</span>`}
                     </div>
                   ` : ''}
                 </div>
@@ -1117,9 +1121,9 @@
       const dO = safeNum(tx.deliveries?.orange); const dP = safeNum(tx.deliveries?.purple); const dC = safeNum(tx.deliveries?.crate);
       const rO = safeNum(tx.returns?.orange); const rP = safeNum(tx.returns?.purple); const rC = safeNum(tx.returns?.crate);
       
-      const oTW = safeNum(tx.ownTakeWash) || safeNum(tx.ownDeliverWash); 
-      const oTR = safeNum(tx.ownTakeRefill) || safeNum(tx.ownDeliverRefill); 
-      const oDD = safeNum(tx.ownDeliverDone) || safeNum(tx.ownReturn);
+      const oTW = safeNum(tx.ownTakeWash); 
+      const oTR = safeNum(tx.ownTakeRefill); 
+      const oDD = safeNum(tx.ownDeliverDone);
       const oTU = safeNum(tx.ownTakeUnpaid);
       const oDPW = safeNum(tx.ownDeliverPayWash);
       const oDPR = safeNum(tx.ownDeliverPayRefill);
@@ -1498,7 +1502,7 @@
                     <span class="text-[10px] ml-2 px-2 py-0.5 rounded-full font-bold ${u.role === 'admin' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}">${u.role === 'admin' ? 'Admin' : 'Staff'}</span>
                   </div>
                   <div class="flex items-center gap-2">
-                    <span class="text-[10px] font-mono text-gray-400 mr-1 border bg-white px-1.5 rounded">PIN: ${u.role === 'admin' ? '****' : u.pin}</span>
+                    <span class="text-[10px] font-mono text-gray-400 mr-1 border bg-white px-1.5 rounded">PIN: ${u.role === 'admin' && window.currentUser.role !== 'super_admin' ? '****' : u.pin}</span>
                     <button onclick="window.editStaff('${u.id}')" class="p-1.5 bg-blue-50 text-blue-600 rounded-lg active:bg-blue-100"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i></button>
                     <button onclick="window.deleteStaff('${u.id}')" class="p-1.5 bg-red-50 text-red-600 rounded-lg active:bg-red-100"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
                   </div>
