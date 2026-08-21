@@ -75,7 +75,7 @@
     window.customers = [];
     window.transactions = [];
     window.users = []; 
-    window.globalStock = { orange: 0, purple: 0, crate: 0 }; 
+    window.globalStock = { orange: 0, purple: 0, crate: 0, promptpayNumber: '' }; 
     window.currentUser = null; 
 
     window.currentView = 'loading';
@@ -95,8 +95,9 @@
     window.ownDeliverPayRefill = 0;
     window.ownBottlePayMode = 'pay_now'; 
     window.isRemoteArea = false;
-    window.cashReceived = ''; // เปลี่ยนเป็น string ว่างเริ่มต้น
+    window.cashReceived = ''; 
     window.paymentStatus = 'paid';
+    window.paymentMethod = 'cash'; // 'cash' หรือ 'qr'
     window.txNote = '';
 
     // Customer Form States
@@ -128,7 +129,7 @@
     });
     onSnapshot(doc(db, "system", "global_stock"), (docSnap) => { 
       if(docSnap.exists()) window.globalStock = docSnap.data(); 
-      else window.globalStock = { orange: 0, purple: 0, crate: 0 };
+      else window.globalStock = { orange: 0, purple: 0, crate: 0, promptpayNumber: '' };
       checkLoad('stock'); 
     });
 
@@ -302,6 +303,14 @@
       } else {
         window.showToast('รหัส PIN ไม่ถูกต้อง', 'error');
       }
+    };
+
+    window.savePromptPay = async function() {
+      const pp = document.getElementById('promptpay-input').value.trim();
+      try {
+        await setDoc(doc(db, "system", "global_stock"), { promptpayNumber: pp }, { merge: true });
+        window.showToast('อัปเดตเลขพร้อมเพย์สำเร็จ');
+      } catch(e) { window.showToast('เกิดข้อผิดพลาด', 'error'); }
     };
 
     window.saveStaff = async function(e) {
@@ -509,7 +518,9 @@
       window.ownBottlePayMode = 'pay_now'; 
       window.isRemoteArea = false;
       window.cashReceived = '';
-      window.paymentStatus = 'paid'; window.txNote = '';
+      window.paymentStatus = 'paid';
+      window.paymentMethod = 'cash'; 
+      window.txNote = '';
       window.switchView('delivery');
     };
 
@@ -559,7 +570,9 @@
           ownTakeWash: window.ownTakeWash, ownTakeRefill: window.ownTakeRefill, ownDeliverDone: window.ownDeliverDone,
           ownTakeUnpaid: window.ownTakeUnpaid, ownDeliverPayWash: window.ownDeliverPayWash, ownDeliverPayRefill: window.ownDeliverPayRefill,
           isRemoteArea: window.isRemoteArea,
-          paymentStatus: window.paymentStatus, totalAmount: calcTotal, 
+          paymentStatus: window.paymentStatus, 
+          paymentMethod: window.paymentStatus === 'paid' ? window.paymentMethod : null,
+          totalAmount: calcTotal, 
           amountCollected, addedDebt, status: 'active', timestamp: Date.now(),
           note: window.txNote, createdBy: window.currentUser.name
         });
@@ -634,18 +647,24 @@
         'ส่งน้ำ(ส้ม)', 'รับคืน(ส้ม)', 'ส่งน้ำ(ม่วง)', 'รับคืน(ม่วง)', 'ส่งน้ำ(ลัง)', 'รับคืน(ลัง)', 
         'รับมาทำ(จ่ายเลย5฿)', 'รับมาทำ(จ่ายเลย15฿)', 'รับมาทำ(ยังไม่เก็บเงิน)', 
         'ส่งคืน(เก็บเงิน5฿)', 'ส่งคืน(เก็บเงิน15฿)', 'ส่งคืน(จ่ายเงินแล้ว)',
-        'มูลค่าบิล(บาท)', 'เงินสดที่เก็บ(บาท)', 'ค้างจ่ายเพิ่ม(บาท)', 'หมายเหตุ'
+        'มูลค่าบิล(บาท)', 'เก็บเงินสด(บาท)', 'โอนQR(บาท)', 'ค้างจ่ายเพิ่ม(บาท)', 'หมายเหตุ'
       ];
       
       const rows = txList.map(tx => {
-        const paymentStr = tx.paymentStatus === 'paid' ? 'จ่ายแล้ว' : (tx.paymentStatus === 'support' ? 'สนับสนุน(ฟรี)' : 'ค้างจ่าย');
+        let paymentStr = 'ค้างจ่าย';
+        if (tx.paymentStatus === 'support') paymentStr = 'สนับสนุน(ฟรี)';
+        else if (tx.paymentStatus === 'paid') paymentStr = tx.paymentMethod === 'qr' ? 'โอนผ่าน QR' : 'เงินสด';
+
+        const cashAmt = (tx.paymentStatus === 'paid' && tx.paymentMethod !== 'qr') ? safeNum(tx.amountCollected) : 0;
+        const qrAmt = (tx.paymentStatus === 'paid' && tx.paymentMethod === 'qr') ? safeNum(tx.amountCollected) : 0;
+
         return [
           `"${window.formatDate(tx.timestamp)}"`, `"${tx.customerName}"`, `"${tx.zone}"`, `"${tx.createdBy || '-'}"`, 
           tx.status === 'voided' ? 'ยกเลิก' : 'ปกติ', paymentStr, tx.isRemoteArea ? 'ใช่ (+ค่าส่ง)' : 'ปกติ',
           safeNum(tx.deliveries?.orange), safeNum(tx.returns?.orange), safeNum(tx.deliveries?.purple), safeNum(tx.returns?.purple), safeNum(tx.deliveries?.crate), safeNum(tx.returns?.crate), 
           safeNum(tx.ownTakeWash), safeNum(tx.ownTakeRefill), safeNum(tx.ownTakeUnpaid),
           safeNum(tx.ownDeliverPayWash), safeNum(tx.ownDeliverPayRefill), safeNum(tx.ownDeliverDone),
-          safeNum(tx.totalAmount), safeNum(tx.amountCollected), safeNum(tx.addedDebt), `"${tx.note || ''}"`
+          safeNum(tx.totalAmount), cashAmt, qrAmt, safeNum(tx.addedDebt), `"${tx.note || ''}"`
         ].join(',');
       });
 
@@ -898,7 +917,6 @@
 
           <div class="p-4 space-y-4">
             
-            <!-- พื้นที่ห่างไกล -->
             <div class="flex items-center justify-between p-3.5 bg-amber-50/80 border border-amber-200 rounded-2xl">
               <div class="flex items-center">
                 <i data-lucide="map-pin" class="w-5 h-5 text-amber-600 mr-2 shrink-0"></i>
@@ -912,7 +930,6 @@
               </button>
             </div>
 
-            <!-- รายการส่งน้ำโรงงาน -->
             <div class="bg-white rounded-3xl shadow-sm p-4 border border-blue-50 relative overflow-hidden">
               <div class="absolute top-0 left-0 w-1.5 h-full bg-blue-500"></div>
               <div class="flex justify-between items-end mb-2">
@@ -935,7 +952,6 @@
               `}).join('')}
             </div>
 
-            <!-- ถังส่วนตัวลูกค้า -->
             <div class="bg-white rounded-3xl shadow-sm p-4 border border-indigo-50 relative overflow-hidden">
               <div class="absolute top-0 left-0 w-1.5 h-full bg-indigo-400"></div>
               <h3 class="font-bold text-indigo-800 mb-2 flex items-center flex-wrap">
@@ -1001,7 +1017,6 @@
               `}
             </div>
 
-            <!-- รับคืนถังเปล่าโรงงาน -->
             <div class="bg-white rounded-3xl shadow-sm p-4 border border-gray-100 relative overflow-hidden">
               <div class="absolute top-0 left-0 w-1.5 h-full bg-gray-300"></div>
               <h3 class="font-bold text-gray-700 mb-2 flex items-center"><i data-lucide="check-circle" class="w-4 h-4 mr-2"></i> รับคืน ถัง/ลัง เปล่า</h3>
@@ -1024,13 +1039,11 @@
               }).join('')}
             </div>
 
-            <!-- หมายเหตุ -->
             <div class="bg-white rounded-3xl shadow-sm p-4 border border-gray-100">
               <label class="block text-sm font-bold text-gray-700 mb-2 flex items-center"><i data-lucide="message-square" class="w-4 h-4 mr-2 text-gray-400"></i> หมายเหตุ (ถ้ามี)</label>
               <input type="text" id="tx-note-input" value="${window.txNote}" oninput="window.txNote=this.value" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-sm outline-none" placeholder="เช่น โอนเงิน, ฝากไว้หน้าบ้าน..." />
             </div>
 
-            <!-- สถานะเก็บเงิน และ เครื่องคิดเลขทอนเงิน -->
             <div class="bg-white rounded-3xl shadow-sm p-4 border border-gray-100">
               <h3 class="font-bold text-gray-800 mb-3 flex items-center"><i data-lucide="credit-card" class="w-4 h-4 mr-2 text-blue-500"></i> สถานะเก็บเงิน</h3>
               <div class="flex gap-2">
@@ -1041,33 +1054,52 @@
 
               ${window.paymentStatus === 'paid' && totalToCollect > 0 ? `
                 <div class="mt-4 pt-4 border-t border-gray-100">
-                  <div class="flex justify-between items-center mb-3">
-                    <span class="text-sm font-bold text-gray-800 flex items-center"><i data-lucide="calculator" class="w-4 h-4 mr-1.5 text-blue-500"></i> คำนวณเงินทอน</span>
-                    <span class="text-xs text-gray-500 font-bold bg-gray-100 px-2 py-1 rounded-md">ยอดต้องจ่าย ${totalToCollect} ฿</span>
-                  </div>
-                  
-                  <div class="mb-3">
-                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="cash-received-input" placeholder="พิมพ์จำนวนเงินที่รับมา..." value="${window.cashReceived}" oninput="window.cashReceived=this.value ? safeNum(this.value) : ''; window.render();" class="w-full px-4 py-3 text-lg font-bold rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50 text-center mb-2" />
-                    
-                    <div class="grid grid-cols-4 gap-2">
-                      <button type="button" onclick="window.cashReceived=${totalToCollect}; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-blue-50 active:text-blue-600 active:border-blue-200 transition-colors">พอดี</button>
-                      <button type="button" onclick="window.cashReceived=100; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-blue-50 active:text-blue-600 active:border-blue-200 transition-colors">100</button>
-                      <button type="button" onclick="window.cashReceived=500; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-blue-50 active:text-blue-600 active:border-blue-200 transition-colors">500</button>
-                      <button type="button" onclick="window.cashReceived=1000; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-blue-50 active:text-blue-600 active:border-blue-200 transition-colors">1,000</button>
-                    </div>
+                  <div class="flex gap-2 mb-4 bg-gray-100 p-1 rounded-xl">
+                    <button onclick="window.paymentMethod='cash'; window.render();" class="flex-1 py-2 text-xs font-bold rounded-lg transition-colors flex justify-center items-center ${window.paymentMethod === 'cash' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-emerald-600'}"><i data-lucide="banknote" class="w-4 h-4 mr-1"></i> เงินสด</button>
+                    <button onclick="window.paymentMethod='qr'; window.render();" class="flex-1 py-2 text-xs font-bold rounded-lg transition-colors flex justify-center items-center ${window.paymentMethod === 'qr' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-blue-600'}"><i data-lucide="qr-code" class="w-4 h-4 mr-1"></i> โอนผ่าน QR</button>
                   </div>
 
-                  ${window.cashReceived !== '' ? `
-                    <div class="p-3.5 rounded-xl text-center font-bold text-base shadow-inner ${changeAmount >= 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-600 border border-red-200'}">
-                      ${changeAmount >= 0 ? `💵 ทอนเงิน: <span class="text-2xl font-black text-emerald-600 ml-1">${changeAmount.toLocaleString()} ฿</span>` : `⚠️ เงินไม่พอ: ขาดอีก <span class="text-xl font-black text-red-600 ml-1">${Math.abs(changeAmount).toLocaleString()} ฿</span>`}
+                  ${window.paymentMethod === 'cash' ? `
+                    <div class="flex justify-between items-center mb-3">
+                      <span class="text-sm font-bold text-gray-800 flex items-center"><i data-lucide="calculator" class="w-4 h-4 mr-1.5 text-blue-500"></i> คำนวณเงินทอน</span>
+                      <span class="text-xs text-gray-500 font-bold bg-gray-100 px-2 py-1 rounded-md">ยอดต้องจ่าย ${totalToCollect} ฿</span>
                     </div>
-                  ` : ''}
+                    <div class="mb-3">
+                      <input type="text" inputmode="numeric" pattern="[0-9]*" id="cash-received-input" placeholder="พิมพ์จำนวนเงินที่รับมา..." value="${window.cashReceived}" oninput="window.cashReceived=this.value ? safeNum(this.value) : ''; window.render();" class="w-full px-4 py-3 text-lg font-bold rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50 text-center mb-2" />
+                      <div class="grid grid-cols-4 gap-2">
+                        <button type="button" onclick="window.cashReceived=${totalToCollect}; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-blue-50 active:text-blue-600 active:border-blue-200 transition-colors">พอดี</button>
+                        <button type="button" onclick="window.cashReceived=100; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-blue-50 active:text-blue-600 active:border-blue-200 transition-colors">100</button>
+                        <button type="button" onclick="window.cashReceived=500; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-blue-50 active:text-blue-600 active:border-blue-200 transition-colors">500</button>
+                        <button type="button" onclick="window.cashReceived=1000; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-blue-50 active:text-blue-600 active:border-blue-200 transition-colors">1,000</button>
+                      </div>
+                    </div>
+                    ${window.cashReceived !== '' ? `
+                      <div class="p-3.5 rounded-xl text-center font-bold text-base shadow-inner ${changeAmount >= 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-600 border border-red-200'}">
+                        ${changeAmount >= 0 ? `💵 ทอนเงิน: <span class="text-2xl font-black text-emerald-600 ml-1">${changeAmount.toLocaleString()} ฿</span>` : `⚠️ เงินไม่พอ: ขาดอีก <span class="text-xl font-black text-red-600 ml-1">${Math.abs(changeAmount).toLocaleString()} ฿</span>`}
+                      </div>
+                    ` : ''}
+                  ` : `
+                    <div class="flex flex-col items-center justify-center p-2">
+                      ${window.globalStock.promptpayNumber ? `
+                        <div class="bg-white p-3 rounded-3xl shadow-sm border border-gray-200 mb-3 relative">
+                          <img src="https://promptpay.io/${window.globalStock.promptpayNumber}/${totalToCollect}.png" class="w-48 h-48" alt="QR Code" />
+                        </div>
+                        <p class="text-sm font-bold text-blue-800 bg-blue-50 px-5 py-2 rounded-full border border-blue-100 shadow-sm">ยอดโอน: ${totalToCollect} บาท</p>
+                        <p class="text-[11px] text-red-500 font-bold mt-4 text-center bg-red-50 p-2.5 rounded-xl border border-red-100"><i data-lucide="alert-triangle" class="w-3 h-3 inline mr-1"></i>พนักงานต้องตรวจสอบ "สลิปโอนเงิน" จากจอลูกค้า<br>ก่อนกดปุ่มบันทึกรายการทุกครั้ง</p>
+                      ` : `
+                        <div class="py-8 text-center text-gray-400">
+                          <i data-lucide="qr-code" class="w-12 h-12 mx-auto mb-2 opacity-30"></i>
+                          <p class="text-sm font-bold">ยังไม่ได้ตั้งค่าพร้อมเพย์</p>
+                          <p class="text-[10px]">แจ้งแอดมินให้ตั้งค่าในเมนู "จัดการ" ก่อนใช้งาน</p>
+                        </div>
+                      `}
+                    </div>
+                  `}
                 </div>
               ` : ''}
             </div>
           </div>
 
-          <!-- แถบด้านล่างสำหรับกดบันทึก -->
           <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 pb-6 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.1)] max-w-md mx-auto z-20">
             <div class="flex justify-between items-end mb-4 px-2">
               <div>
@@ -1130,13 +1162,19 @@
 
       let statusBadge = '';
       if (tx.status === 'voided') statusBadge = `<span class="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-md font-bold inline-block">ยกเลิกแล้ว</span>`;
-      else if (tx.paymentStatus === 'paid') statusBadge = `<span class="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-md font-bold inline-block">จ่ายแล้ว</span>`;
+      else if (tx.paymentStatus === 'paid') {
+        if(tx.paymentMethod === 'qr') statusBadge = `<span class="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-md font-bold inline-block">โอน QR</span>`;
+        else statusBadge = `<span class="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-md font-bold inline-block">เงินสด</span>`;
+      }
       else if (tx.paymentStatus === 'support') statusBadge = `<span class="text-[10px] bg-pink-100 text-pink-700 px-2 py-0.5 rounded-md font-bold inline-block">สนับสนุน(ฟรี)</span>`;
       else statusBadge = `<span class="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-md font-bold inline-block">ค้างจ่าย</span>`;
 
       let moneyStr = '';
       if (tx.paymentStatus === 'support') moneyStr = `<span class="text-pink-600">สนับสนุน (ฟรี)</span>`;
-      else moneyStr = `<span class="${safeNum(tx.addedDebt) > 0 ? 'text-red-500' : 'text-blue-600'}">${safeNum(tx.amountCollected) > 0 ? `เก็บสด ${safeNum(tx.amountCollected)} ฿` : `ค้าง ${safeNum(tx.addedDebt)} ฿`}</span>`;
+      else if (tx.paymentStatus === 'paid') {
+          moneyStr = `<span class="text-blue-600">${tx.paymentMethod === 'qr' ? 'โอนเข้าบัญชี ' : 'เก็บเงินสด '}${safeNum(tx.amountCollected)} ฿</span>`;
+      }
+      else moneyStr = `<span class="text-red-500">ค้าง ${safeNum(tx.addedDebt)} ฿</span>`;
 
       return `
         <div class="p-4 rounded-3xl shadow-sm border transition-all ${tx.status === 'voided' ? 'bg-gray-100 border-gray-200 opacity-60' : 'bg-white border-gray-100'}">
@@ -1214,10 +1252,12 @@
       const stats = validTx.reduce((acc, tx) => {
         if (tx.paymentStatus === 'support') {
           acc.support += safeNum(tx.totalAmount);
-        } else {
-          acc.rev += safeNum(tx.amountCollected); 
-          acc.debt += safeNum(tx.addedDebt) > 0 ? safeNum(tx.addedDebt) : 0;
+        } else if (tx.paymentStatus === 'paid') {
+          if (tx.paymentMethod === 'qr') acc.qrRev += safeNum(tx.amountCollected);
+          else acc.cashRev += safeNum(tx.amountCollected);
+          acc.rev += safeNum(tx.amountCollected);
         }
+        acc.debt += safeNum(tx.addedDebt) > 0 ? safeNum(tx.addedDebt) : 0;
 
         acc.dO += safeNum(tx.deliveries?.orange); acc.dP += safeNum(tx.deliveries?.purple); acc.dC += safeNum(tx.deliveries?.crate);
         acc.rO += safeNum(tx.returns?.orange); acc.rP += safeNum(tx.returns?.purple); acc.rC += safeNum(tx.returns?.crate);
@@ -1228,19 +1268,22 @@
         acc.oTU += safeNum(tx.ownTakeUnpaid);
         
         const creator = tx.createdBy || 'ไม่ระบุ';
-        acc.staffCash[creator] = (acc.staffCash[creator] || 0) + safeNum(tx.amountCollected);
+        if (!acc.staffCash[creator]) acc.staffCash[creator] = 0;
+        if (tx.paymentStatus === 'paid' && tx.paymentMethod !== 'qr') {
+            acc.staffCash[creator] += safeNum(tx.amountCollected);
+        }
 
         return acc;
-      }, { rev: 0, debt: 0, support: 0, dO: 0, dP: 0, dC: 0, rO: 0, rP: 0, rC: 0, oW: 0, oR: 0, oRet: 0, oTU: 0, staffCash: {} });
+      }, { rev: 0, cashRev: 0, qrRev: 0, debt: 0, support: 0, dO: 0, dP: 0, dC: 0, rO: 0, rP: 0, rC: 0, oW: 0, oR: 0, oRet: 0, oTU: 0, staffCash: {} });
 
       const totalDel = stats.dO + stats.dP + stats.dC;
 
       const staffCashHTML = Object.keys(stats.staffCash).map(name => `
-        <div class="flex justify-between items-center py-2.5 border-b border-green-100/50 last:border-0">
-          <span class="text-sm font-bold text-green-800 flex items-center"><i data-lucide="truck" class="w-4 h-4 mr-2 text-green-600"></i> ${name}</span>
-          <span class="text-base font-black text-green-700">${stats.staffCash[name].toLocaleString()} ฿</span>
+        <div class="flex justify-between items-center py-2.5 border-b border-emerald-100/50 last:border-0">
+          <span class="text-sm font-bold text-emerald-800 flex items-center"><i data-lucide="truck" class="w-4 h-4 mr-2 text-emerald-600"></i> ${name}</span>
+          <span class="text-base font-black text-emerald-700">${stats.staffCash[name].toLocaleString()} ฿</span>
         </div>
-      `).join('') || '<p class="text-sm text-green-600/50 text-center py-2">ไม่มีข้อมูล</p>';
+      `).join('') || '<p class="text-sm text-emerald-600/50 text-center py-2">ไม่มีข้อมูล</p>';
 
       const activeCustomers = window.customers.filter(c => safeNum(c.debt) > 0 || safeNum(c.stockOrange) > 0 || safeNum(c.stockPurple) > 0 || safeNum(c.stockCrate) > 0 || safeNum(c.stockOwnBottle) > 0)
         .sort((a, b) => safeNum(b.debt) - safeNum(a.debt));
@@ -1281,24 +1324,28 @@
             `).join('')}
           </div>
 
-          <div class="grid grid-cols-3 gap-3 mb-4">
+          <div class="grid grid-cols-2 gap-3 mb-4">
             <div class="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center items-center text-center">
-              <span class="text-gray-500 text-[10px] font-bold mb-1 flex items-center uppercase"><i data-lucide="check-circle" class="w-3 h-3 mr-1 text-green-500"></i> เงินสด</span>
-              <span class="text-lg font-black text-green-600">${stats.rev.toLocaleString()}</span>
+              <span class="text-gray-500 text-[10px] font-bold mb-1 flex items-center uppercase"><i data-lucide="banknote" class="w-3 h-3 mr-1 text-emerald-500"></i> รับเงินสด</span>
+              <span class="text-xl font-black text-emerald-600">${stats.cashRev.toLocaleString()}</span>
+            </div>
+            <div class="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center items-center text-center">
+              <span class="text-gray-500 text-[10px] font-bold mb-1 flex items-center uppercase"><i data-lucide="qr-code" class="w-3 h-3 mr-1 text-blue-500"></i> โอนเข้าบัญชี (QR)</span>
+              <span class="text-xl font-black text-blue-600">${stats.qrRev.toLocaleString()}</span>
             </div>
             <div class="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center items-center text-center">
               <span class="text-gray-500 text-[10px] font-bold mb-1 flex items-center uppercase"><i data-lucide="alert-circle" class="w-3 h-3 mr-1 text-red-500"></i> ค้างจ่าย</span>
-              <span class="text-lg font-black text-red-500">${stats.debt.toLocaleString()}</span>
+              <span class="text-xl font-black text-red-500">${stats.debt.toLocaleString()}</span>
             </div>
             <div class="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center items-center text-center">
               <span class="text-gray-500 text-[10px] font-bold mb-1 flex items-center uppercase"><i data-lucide="gift" class="w-3 h-3 mr-1 text-pink-500"></i> สนับสนุน</span>
-              <span class="text-lg font-black text-pink-500">${stats.support.toLocaleString()}</span>
+              <span class="text-xl font-black text-pink-500">${stats.support.toLocaleString()}</span>
             </div>
           </div>
 
-          <div class="bg-green-50 p-5 rounded-3xl shadow-sm border border-green-100 mb-4">
-            <h3 class="font-bold text-green-900 mb-3 flex items-center">
-              <i data-lucide="wallet" class="w-4.5 h-4.5 mr-2 text-green-600"></i> ยอดเงินส่งโรงงาน (แยกคน)
+          <div class="bg-emerald-50 p-5 rounded-3xl shadow-sm border border-emerald-100 mb-4">
+            <h3 class="font-bold text-emerald-900 mb-3 flex items-center">
+              <i data-lucide="wallet" class="w-4.5 h-4.5 mr-2 text-emerald-600"></i> ยอดเก็บเงินสด (ที่ต้องส่งโรงงาน)
             </h3>
             <div class="space-y-1">
               ${staffCashHTML}
@@ -1381,7 +1428,8 @@
       const startOfDay = d.getTime();
       
       const myTx = window.transactions.filter(t => t.createdBy === window.currentUser.name && t.timestamp >= startOfDay && t.status !== 'voided');
-      const myCash = myTx.reduce((acc, t) => acc + safeNum(t.amountCollected), 0);
+      const myCash = myTx.reduce((acc, t) => acc + (t.paymentStatus === 'paid' && t.paymentMethod !== 'qr' ? safeNum(t.amountCollected) : 0), 0);
+      const myQR = myTx.reduce((acc, t) => acc + (t.paymentStatus === 'paid' && t.paymentMethod === 'qr' ? safeNum(t.amountCollected) : 0), 0);
       const mySupport = myTx.reduce((acc, t) => acc + (t.paymentStatus === 'support' ? safeNum(t.totalAmount) : 0), 0);
       const myDels = myTx.reduce((acc, t) => acc + safeNum(t.deliveries?.orange) + safeNum(t.deliveries?.purple) + safeNum(t.deliveries?.crate), 0);
       const myOwn = myTx.reduce((acc, t) => acc + safeNum(t.ownTakeWash) + safeNum(t.ownTakeRefill) + safeNum(t.ownTakeUnpaid) + safeNum(t.ownDeliverDone) + safeNum(t.ownDeliverPayWash) + safeNum(t.ownDeliverPayRefill), 0);
@@ -1399,16 +1447,20 @@
             <p class="text-sm font-bold text-gray-400 mb-5">พนักงานส่งน้ำ</p>
             
             <div class="bg-gray-50 rounded-2xl p-4 mb-5 border border-gray-100 text-left">
-              <p class="text-xs font-bold text-gray-500 mb-2 text-center border-b border-gray-200 pb-2">ผลงานของฉันวันนี้</p>
+              <p class="text-xs font-bold text-gray-500 mb-3 text-center border-b border-gray-200 pb-2">ผลงานของฉันวันนี้</p>
               
-              <div class="flex justify-between items-center mb-2">
-                <span class="text-sm font-bold text-gray-700">เงินที่ต้องส่งโรงงาน:</span>
-                <span class="text-xl font-black text-green-600">${myCash.toLocaleString()} ฿</span>
+              <div class="flex justify-between items-center mb-1">
+                <span class="text-sm font-bold text-gray-700">รับเงินสด (ต้องส่งโรงงาน):</span>
+                <span class="text-xl font-black text-emerald-600">${myCash.toLocaleString()} ฿</span>
+              </div>
+              <div class="flex justify-between items-center mb-3 pb-3 border-b border-gray-200">
+                <span class="text-sm font-bold text-gray-700">ลูกค้าโอน QR (เข้าบัญชี):</span>
+                <span class="text-lg font-black text-blue-600">${myQR.toLocaleString()} ฿</span>
               </div>
               
-              <div class="flex justify-between items-center mb-2 pb-2 border-b border-gray-200">
-                <span class="text-sm font-bold text-gray-700">สนับสนุน (ให้ฟรี):</span>
-                <span class="text-lg font-black text-pink-500">${mySupport.toLocaleString()} ฿</span>
+              <div class="flex justify-between items-center mb-2">
+                <span class="text-xs font-bold text-gray-500">บิลสนับสนุน (ให้ฟรี):</span>
+                <span class="text-sm font-black text-pink-500">${mySupport.toLocaleString()} ฿</span>
               </div>
               
               <div class="flex justify-between items-center mb-1">
@@ -1443,6 +1495,15 @@
           <div class="mb-6 flex items-end bg-slate-800 text-white p-5 rounded-b-3xl shadow-md -mt-4 -mx-4 pt-8 justify-between">
             <div><h1 class="text-2xl font-black tracking-tight flex items-center"><i data-lucide="database" class="w-6 h-6 mr-2"></i> จัดการโรงงาน</h1><p class="text-xs text-slate-300 font-bold mt-1">บทบาท: ${window.currentUser.name}</p></div>
             <button onclick="window.logout()" class="p-2 bg-red-500/20 text-red-300 rounded-xl hover:bg-red-500/40"><i data-lucide="log-out" class="w-5 h-5"></i></button>
+          </div>
+
+          <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-4">
+            <h3 class="font-bold text-gray-800 mb-4 flex items-center"><i data-lucide="qr-code" class="w-5 h-5 mr-2 text-indigo-600"></i> ตั้งค่าพร้อมเพย์รับเงิน</h3>
+            <div class="flex gap-2">
+              <input type="text" id="promptpay-input" value="${window.globalStock.promptpayNumber || ''}" placeholder="เบอร์โทร หรือ เลขบัตรปชช." class="flex-1 px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold bg-gray-50 outline-none">
+              <button onclick="window.savePromptPay()" class="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md active:scale-95 flex justify-center items-center">บันทึก</button>
+            </div>
+            <p class="text-[10px] text-gray-400 mt-2">* ใช้สำหรับสร้าง QR Code ให้ลูกค้าสแกนจ่ายอัตโนมัติตามยอดบิล</p>
           </div>
 
           <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-4">
