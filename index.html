@@ -70,7 +70,6 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // บัญชี Super Admin (ฝังอยู่ในระบบ ไม่ถูกแสดง PIN ให้ใครเห็น)
     const SUPER_ADMIN_ACCOUNT = { id: 'super_admin_fixed_id', name: 'ผู้ดูแลระบบสูงสุด', pin: '1617', role: 'super_admin' };
 
     window.customers = [];
@@ -85,6 +84,7 @@
     window.reportPeriod = 'day';
     window.selectedCustomerId = null;
 
+    // Delivery States
     window.deliveries = { orange: 0, purple: 0, crate: 0 };
     window.returns = { orange: 0, purple: 0, crate: 0 };
     window.ownTakeWash = 0; 
@@ -94,12 +94,16 @@
     window.ownDeliverPayWash = 0;
     window.ownDeliverPayRefill = 0;
     window.ownBottlePayMode = 'pay_now'; 
+    window.isRemoteArea = false; // ตัวเลือกพื้นที่ห่างไกล
+    window.cashReceived = 0;     // รับเงินสดมาเพื่อทอน
     window.paymentStatus = 'paid';
     window.txNote = '';
 
+    // Customer Form States
     window.formName = ''; window.formPhone = ''; window.formZone = '';
     window.formDebt = 0; window.formStockOrange = 0; window.formStockPurple = 0; window.formStockCrate = 0; window.formStockOwnBottle = 0;
 
+    // User Management
     window.editingUserId = null;
     window.newUserRole = 'staff'; window.newUserName = ''; window.newUserPin = '';
 
@@ -309,7 +313,7 @@
       try {
         if (window.editingUserId) {
           await updateDoc(doc(db, "users", window.editingUserId), { name: window.newUserName, pin: window.newUserPin, role: window.newUserRole });
-          window.showToast('แก้ไขข้อมูลพนักงานสำเร็จ');
+          window.showToast('แก้ไขข้อมูลสำเร็จ');
         } else {
           await addDoc(collection(db, "users"), { name: window.newUserName, pin: window.newUserPin, role: window.newUserRole });
           window.showToast('เพิ่มผู้ใช้งานสำเร็จ');
@@ -500,6 +504,8 @@
       window.ownTakeWash = 0; window.ownTakeRefill = 0; window.ownDeliverDone = 0;
       window.ownTakeUnpaid = 0; window.ownDeliverPayWash = 0; window.ownDeliverPayRefill = 0;
       window.ownBottlePayMode = 'pay_now'; 
+      window.isRemoteArea = false;
+      window.cashReceived = 0;
       window.paymentStatus = 'paid'; window.txNote = '';
       window.switchView('delivery');
     };
@@ -511,7 +517,11 @@
       const btn = document.getElementById('btn-submit-delivery');
       if(btn) btn.innerHTML = '<div class="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>';
 
-      const factoryTotal = (window.deliveries.orange * window.prices.orange) + (window.deliveries.purple * window.prices.purple) + (window.deliveries.crate * window.prices.crate);
+      const pOrange = window.prices.orange + (window.isRemoteArea ? 5 : 0);
+      const pPurple = window.prices.purple + (window.isRemoteArea ? 5 : 0);
+      const pCrate = window.prices.crate + (window.isRemoteArea ? 10 : 0);
+
+      const factoryTotal = (window.deliveries.orange * pOrange) + (window.deliveries.purple * pPurple) + (window.deliveries.crate * pCrate);
       const ownServiceTotal = (window.ownTakeWash * window.prices.ownWash) + (window.ownTakeRefill * window.prices.ownRefill) + (window.ownDeliverPayWash * window.prices.ownWash) + (window.ownDeliverPayRefill * window.prices.ownRefill);
       const calcTotal = factoryTotal + ownServiceTotal;
       
@@ -545,6 +555,7 @@
           deliveries: {...window.deliveries}, returns: {...window.returns}, 
           ownTakeWash: window.ownTakeWash, ownTakeRefill: window.ownTakeRefill, ownDeliverDone: window.ownDeliverDone,
           ownTakeUnpaid: window.ownTakeUnpaid, ownDeliverPayWash: window.ownDeliverPayWash, ownDeliverPayRefill: window.ownDeliverPayRefill,
+          isRemoteArea: window.isRemoteArea,
           paymentStatus: window.paymentStatus, totalAmount: calcTotal, 
           amountCollected, addedDebt, status: 'active', timestamp: Date.now(),
           note: window.txNote, createdBy: window.currentUser.name
@@ -569,7 +580,7 @@
       if (!tx) return;
 
       window.showModal('ต้องการยกเลิกบิลนี้?', 'ระบบจะดึงสต๊อกและยอดหนี้กลับ (เฉพาะผู้ดูแลระบบ)', 'ยืนยันยกเลิกบิล', true, async () => {
-        if(!['admin', 'super_admin'].includes(window.currentUser.role)) return window.showToast('สิทธิ์ไม่เพียงพอ แจ้งผู้ดูแลระบบเพื่อยกเลิก', 'error');
+        if(!['admin', 'super_admin'].includes(window.currentUser.role)) return window.showToast('สิทธิ์ไม่เพียงพอ แจ้งแอดมินเพื่อยกเลิก', 'error');
 
         try {
           const batch = writeBatch(db);
@@ -617,18 +628,18 @@
       if(txList.length === 0) return window.showToast("ไม่มีบิลในช่วงเวลานี้", "error");
 
       const headers = [
-        'วันที่และเวลา', 'ชื่อลูกค้า', 'โซน', 'พนักงานที่ส่ง', 'สถานะบิล', 'การจ่ายเงิน', 
+        'วันที่และเวลา', 'ชื่อลูกค้า', 'โซน', 'พนักงานที่ส่ง', 'สถานะบิล', 'การจ่ายเงิน', 'พื้นที่ห่างไกล',
         'ส่งน้ำ(ส้ม)', 'รับคืน(ส้ม)', 'ส่งน้ำ(ม่วง)', 'รับคืน(ม่วง)', 'ส่งน้ำ(ลัง)', 'รับคืน(ลัง)', 
         'รับมาทำ(จ่ายเลย5฿)', 'รับมาทำ(จ่ายเลย15฿)', 'รับมาทำ(ยังไม่เก็บเงิน)', 
         'ส่งคืน(เก็บเงิน5฿)', 'ส่งคืน(เก็บเงิน15฿)', 'ส่งคืน(จ่ายเงินแล้ว)',
-        'ยอดบิลรวม(บาท)', 'เงินสดที่เก็บ(บาท)', 'ค้างจ่ายเพิ่ม(บาท)', 'หมายเหตุ'
+        'มูลค่าบิล(บาท)', 'เงินสดที่เก็บ(บาท)', 'ค้างจ่ายเพิ่ม(บาท)', 'หมายเหตุ'
       ];
       
       const rows = txList.map(tx => {
         const paymentStr = tx.paymentStatus === 'paid' ? 'จ่ายแล้ว' : (tx.paymentStatus === 'support' ? 'สนับสนุน(ฟรี)' : 'ค้างจ่าย');
         return [
           `"${window.formatDate(tx.timestamp)}"`, `"${tx.customerName}"`, `"${tx.zone}"`, `"${tx.createdBy || '-'}"`, 
-          tx.status === 'voided' ? 'ยกเลิก' : 'ปกติ', paymentStr,
+          tx.status === 'voided' ? 'ยกเลิก' : 'ปกติ', paymentStr, tx.isRemoteArea ? 'ใช่ (+ค่าส่ง)' : 'ปกติ',
           safeNum(tx.deliveries?.orange), safeNum(tx.returns?.orange), safeNum(tx.deliveries?.purple), safeNum(tx.returns?.purple), safeNum(tx.deliveries?.crate), safeNum(tx.returns?.crate), 
           (safeNum(tx.ownTakeWash) + safeNum(tx.ownDeliverWash)), (safeNum(tx.ownTakeRefill) + safeNum(tx.ownDeliverRefill)), safeNum(tx.ownTakeUnpaid),
           safeNum(tx.ownDeliverPayWash), safeNum(tx.ownDeliverPayRefill), (safeNum(tx.ownDeliverDone) + safeNum(tx.ownReturn)),
@@ -829,15 +840,15 @@
                 <div class="grid grid-cols-3 gap-2">
                   <div>
                     <label class="block text-gray-700 text-[11px] font-bold mb-1">ค้างถังส้ม</label>
-                    <input type="number" id="form-orange" value="${window.formStockOrange}" onchange="window.formStockOrange=this.value" class="w-full px-3 py-2.5 rounded-xl border border-orange-200 focus:ring-2 focus:ring-orange-500 text-sm font-bold bg-orange-50 text-orange-700 outline-none" />
+                    <input type="number" id="form-orange" value="${window.formStockOrange}" onchange="window.formStockOrange=this.value" class="w-full px-3 py-2 rounded-xl border border-orange-200 focus:ring-2 focus:ring-orange-500 text-sm font-bold bg-orange-50 text-orange-700 outline-none" />
                   </div>
                   <div>
                     <label class="block text-gray-700 text-[11px] font-bold mb-1">ค้างถังม่วง</label>
-                    <input type="number" id="form-purple" value="${window.formStockPurple}" onchange="window.formStockPurple=this.value" class="w-full px-3 py-2.5 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500 text-sm font-bold bg-purple-50 text-purple-700 outline-none" />
+                    <input type="number" id="form-purple" value="${window.formStockPurple}" onchange="window.formStockPurple=this.value" class="w-full px-3 py-2 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500 text-sm font-bold bg-purple-50 text-purple-700 outline-none" />
                   </div>
                   <div>
                     <label class="block text-gray-700 text-[11px] font-bold mb-1">ค้างลัง</label>
-                    <input type="number" id="form-crate" value="${window.formStockCrate}" onchange="window.formStockCrate=this.value" class="w-full px-3 py-2.5 rounded-xl border border-amber-200 focus:ring-2 focus:ring-amber-500 text-sm font-bold bg-amber-50 text-amber-700 outline-none" />
+                    <input type="number" id="form-crate" value="${window.formStockCrate}" onchange="window.formStockCrate=this.value" class="w-full px-3 py-2 rounded-xl border border-amber-200 focus:ring-2 focus:ring-amber-500 text-sm font-bold bg-amber-50 text-amber-700 outline-none" />
                   </div>
                 </div>
                 <p class="text-[10px] text-red-500 mt-2 font-semibold">* ตัวเลขนี้จะไปทับข้อมูลปัจจุบันของลูกค้าทันที</p>
@@ -854,12 +865,19 @@
       const cust = window.customers.find(c => c.id === window.selectedCustomerId);
       if (!cust) { window.switchView('list'); return; }
 
-      const factoryTotal = (window.deliveries.orange * window.prices.orange) + (window.deliveries.purple * window.prices.purple) + (window.deliveries.crate * window.prices.crate);
+      const pOrange = window.prices.orange + (window.isRemoteArea ? 5 : 0);
+      const pPurple = window.prices.purple + (window.isRemoteArea ? 5 : 0);
+      const pCrate = window.prices.crate + (window.isRemoteArea ? 10 : 0);
+
+      const factoryTotal = (window.deliveries.orange * pOrange) + (window.deliveries.purple * pPurple) + (window.deliveries.crate * pCrate);
       const ownServiceTotal = (window.ownTakeWash * window.prices.ownWash) + (window.ownTakeRefill * window.prices.ownRefill) + (window.ownDeliverPayWash * window.prices.ownWash) + (window.ownDeliverPayRefill * window.prices.ownRefill);
       const calcTotal = factoryTotal + ownServiceTotal;
 
+      const totalToCollect = window.paymentStatus === 'support' ? 0 : calcTotal + safeNum(cust.debt);
+      const changeAmount = window.cashReceived > 0 ? (window.cashReceived - totalToCollect) : 0;
+
       container.innerHTML = `
-        <div class="pb-32 relative">
+        <div class="pb-36 relative">
           <div class="bg-white px-4 py-4 shadow-sm sticky top-0 z-10 flex items-center justify-between border-b border-gray-100">
             <div class="flex items-center">
               <button onclick="window.switchView('list')" class="mr-3 p-2 bg-gray-50 rounded-full text-gray-600 active:bg-gray-200"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
@@ -878,16 +896,33 @@
 
           <div class="p-4 space-y-4">
             
+            <!-- ตัวเลือกพื้นที่ห่างไกล -->
+            <div class="flex items-center justify-between p-3.5 bg-amber-50/80 border border-amber-200 rounded-2xl">
+              <div class="flex items-center">
+                <i data-lucide="map-pin" class="w-5 h-5 text-amber-600 mr-2 shrink-0"></i>
+                <div>
+                  <span class="text-xs font-bold text-amber-900">พื้นที่ห่างไกล (+ค่าส่ง)</span>
+                  <p class="text-[10px] text-amber-700 font-medium">+5฿/ถัง, +10฿/ลัง</p>
+                </div>
+              </div>
+              <button type="button" onclick="window.isRemoteArea=!window.isRemoteArea; window.render();" class="px-3.5 py-1.5 rounded-xl font-bold text-xs transition-all ${window.isRemoteArea ? 'bg-amber-500 text-white shadow-sm scale-105' : 'bg-white text-gray-400 border border-gray-200'}">
+                ${window.isRemoteArea ? 'เปิดใช้งาน (+)' : 'ปิด'}
+              </button>
+            </div>
+
+            <!-- รายการส่งน้ำโรงงาน -->
             <div class="bg-white rounded-3xl shadow-sm p-4 border border-blue-50 relative overflow-hidden">
               <div class="absolute top-0 left-0 w-1.5 h-full bg-blue-500"></div>
               <div class="flex justify-between items-end mb-2">
                 <h3 class="font-bold text-blue-800 flex items-center"><i data-lucide="droplet" class="w-4 h-4 mr-2"></i> รายการส่งน้ำ</h3>
                 <span class="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded font-bold">สต๊อก: <span class="text-orange-600">ส้ม ${window.globalStock.orange}</span> | <span class="text-purple-600">ม่วง ${window.globalStock.purple}</span> | <span class="text-amber-700">ลัง ${window.globalStock.crate}</span></span>
               </div>
-              ${['orange', 'purple', 'crate'].map(item => `
+              ${['orange', 'purple', 'crate'].map(item => {
+                const currentPrice = item === 'orange' ? pOrange : (item === 'purple' ? pPurple : pCrate);
+                return `
                 <div class="flex justify-between items-center py-2.5 border-b border-gray-50 last:border-0">
                   <div class="flex items-center gap-2">
-                    <span class="font-bold text-gray-700 text-sm">${item==='orange'?'ถังส้ม (15฿)':item==='purple'?'ถังม่วง (15฿)':'แบบลัง (30฿)'}</span>
+                    <span class="font-bold text-gray-700 text-sm">${item==='orange'?`ถังส้ม (${currentPrice}฿)`:item==='purple'?`ถังม่วง (${currentPrice}฿)`:`แบบลัง (${currentPrice}฿)`}</span>
                   </div>
                   <div class="flex items-center gap-1">
                     <button onclick="window.updateQty('deliveries', '${item}', -1)" class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 active:bg-gray-200 shrink-0"><i data-lucide="minus" class="w-5 h-5"></i></button>
@@ -895,9 +930,10 @@
                     <button onclick="window.updateQty('deliveries', '${item}', 1)" class="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-md ${item==='orange'?'bg-orange-500':item==='purple'?'bg-purple-600':'bg-amber-700'} shrink-0"><i data-lucide="plus" class="w-5 h-5"></i></button>
                   </div>
                 </div>
-              `).join('')}
+              `}).join('')}
             </div>
 
+            <!-- ถังส่วนตัวลูกค้า -->
             <div class="bg-white rounded-3xl shadow-sm p-4 border border-indigo-50 relative overflow-hidden">
               <div class="absolute top-0 left-0 w-1.5 h-full bg-indigo-400"></div>
               <h3 class="font-bold text-indigo-800 mb-2 flex items-center flex-wrap">
@@ -963,6 +999,7 @@
               `}
             </div>
 
+            <!-- รับคืนถังเปล่าโรงงาน -->
             <div class="bg-white rounded-3xl shadow-sm p-4 border border-gray-100 relative overflow-hidden">
               <div class="absolute top-0 left-0 w-1.5 h-full bg-gray-300"></div>
               <h3 class="font-bold text-gray-700 mb-2 flex items-center"><i data-lucide="check-circle" class="w-4 h-4 mr-2"></i> รับคืน ถัง/ลัง เปล่า</h3>
@@ -985,11 +1022,13 @@
               }).join('')}
             </div>
 
+            <!-- หมายเหตุ -->
             <div class="bg-white rounded-3xl shadow-sm p-4 border border-gray-100">
               <label class="block text-sm font-bold text-gray-700 mb-2 flex items-center"><i data-lucide="message-square" class="w-4 h-4 mr-2 text-gray-400"></i> หมายเหตุ (ถ้ามี)</label>
               <input type="text" id="tx-note-input" value="${window.txNote}" oninput="window.txNote=this.value" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-sm outline-none" placeholder="เช่น โอนเงิน, ฝากไว้หน้าบ้าน..." />
             </div>
 
+            <!-- สถานะเก็บเงิน -->
             <div class="bg-white rounded-3xl shadow-sm p-4 border border-gray-100">
               <h3 class="font-bold text-gray-800 mb-3 flex items-center"><i data-lucide="credit-card" class="w-4 h-4 mr-2 text-blue-500"></i> สถานะเก็บเงิน</h3>
               <div class="flex gap-2">
@@ -997,13 +1036,43 @@
                 <button onclick="window.paymentStatus='unpaid'; window.render();" class="flex-1 py-3 rounded-xl font-bold flex flex-col items-center border-2 transition-all ${window.paymentStatus === 'unpaid' ? 'bg-orange-50 text-orange-600 border-orange-500 shadow-sm' : 'bg-white text-gray-400 border-gray-100'}"><i data-lucide="alert-circle" class="w-4 h-4 mb-1"></i> ค้างยอด</button>
                 <button onclick="window.paymentStatus='support'; window.render();" class="flex-1 py-3 rounded-xl font-bold flex flex-col items-center border-2 transition-all ${window.paymentStatus === 'support' ? 'bg-pink-50 text-pink-600 border-pink-500 shadow-sm' : 'bg-white text-gray-400 border-gray-100'}"><i data-lucide="gift" class="w-4 h-4 mb-1"></i> สนับสนุน</button>
               </div>
+
+              <!-- เครื่องคิดเลขทอนเงิน (แสดงเมื่อเลือก จ่ายแล้ว) -->
+              ${window.paymentStatus === 'paid' && totalToCollect > 0 ? `
+                <div class="mt-4 pt-3 border-t border-gray-100">
+                  <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs font-bold text-gray-600 flex items-center"><i data-lucide="calculator" class="w-3.5 h-3.5 mr-1 text-blue-500"></i> คำนวณเงินทอน</span>
+                    <span class="text-xs text-gray-400">ยอดต้องจ่าย ${totalToCollect} ฿</span>
+                  </div>
+                  
+                  <div class="flex gap-2 mb-2">
+                    <input type="number" id="cash-received-input" inputmode="numeric" placeholder="รับเงินมา..." value="${window.cashReceived || ''}" oninput="window.cashReceived=safeNum(this.value); window.render();" class="flex-1 px-3 py-2 text-sm font-bold rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50" />
+                    <button type="button" onclick="window.cashReceived=${totalToCollect}; window.render();" class="px-2.5 py-1 text-xs font-bold rounded-lg border border-gray-200 bg-white text-gray-600 active:bg-gray-100">พอดี</button>
+                    <button type="button" onclick="window.cashReceived=100; window.render();" class="px-2.5 py-1 text-xs font-bold rounded-lg border border-gray-200 bg-white text-gray-600 active:bg-gray-100">100</button>
+                    <button type="button" onclick="window.cashReceived=500; window.render();" class="px-2.5 py-1 text-xs font-bold rounded-lg border border-gray-200 bg-white text-gray-600 active:bg-gray-100">500</button>
+                    <button type="button" onclick="window.cashReceived=1000; window.render();" class="px-2.5 py-1 text-xs font-bold rounded-lg border border-gray-200 bg-white text-gray-600 active:bg-gray-100">1,000</button>
+                  </div>
+
+                  ${window.cashReceived > 0 ? `
+                    <div class="p-2.5 rounded-xl text-center font-bold text-sm ${changeAmount >= 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-600 border border-red-200'}">
+                      ${changeAmount >= 0 ? `💵 ทอนเงิน: <span class="text-xl font-black text-emerald-700">${changeAmount.toLocaleString()} ฿</span>` : `⚠️ เงินไม่พอ: ขาดอีก ${Math.abs(changeAmount).toLocaleString()} ฿`}
+                    </div>
+                  ` : ''}
+                </div>
+              ` : ''}
             </div>
           </div>
 
+          <!-- แถบด้านล่างสำหรับกดบันทึก -->
           <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 pb-6 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.1)] max-w-md mx-auto z-20">
             <div class="flex justify-between items-end mb-4 px-2">
-              <div><p class="text-gray-500 text-[10px] font-bold mb-0.5">ค่าบริการ ${calcTotal} + หนี้เก่า ${safeNum(cust.debt)}</p><p class="text-sm text-gray-800 font-black">ต้องเก็บเงินรวม</p></div>
-              <span class="text-3xl font-black ${window.paymentStatus === 'support' ? 'text-pink-500' : 'text-blue-700'}">${window.paymentStatus === 'support' ? 0 : calcTotal + safeNum(cust.debt)} ฿</span>
+              <div>
+                <p class="text-gray-500 text-[10px] font-bold mb-0.5">
+                  ค่าบริการ ${calcTotal} + หนี้เก่า ${safeNum(cust.debt)} ${window.isRemoteArea ? '<span class="text-amber-600">(+ส่งไกล)</span>' : ''}
+                </p>
+                <p class="text-sm text-gray-800 font-black">ต้องเก็บเงินรวม</p>
+              </div>
+              <span class="text-3xl font-black ${window.paymentStatus === 'support' ? 'text-pink-500' : 'text-blue-700'}">${totalToCollect} ฿</span>
             </div>
             <button id="btn-submit-delivery" onclick="window.submitDelivery()" class="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-xl active:scale-95 transition-transform text-lg flex justify-center items-center">บันทึกรายการ</button>
           </div>
@@ -1048,9 +1117,9 @@
       const dO = safeNum(tx.deliveries?.orange); const dP = safeNum(tx.deliveries?.purple); const dC = safeNum(tx.deliveries?.crate);
       const rO = safeNum(tx.returns?.orange); const rP = safeNum(tx.returns?.purple); const rC = safeNum(tx.returns?.crate);
       
-      const oTW = safeNum(tx.ownTakeWash); 
-      const oTR = safeNum(tx.ownTakeRefill); 
-      const oDD = safeNum(tx.ownDeliverDone);
+      const oTW = safeNum(tx.ownTakeWash) || safeNum(tx.ownDeliverWash); 
+      const oTR = safeNum(tx.ownTakeRefill) || safeNum(tx.ownDeliverRefill); 
+      const oDD = safeNum(tx.ownDeliverDone) || safeNum(tx.ownReturn);
       const oTU = safeNum(tx.ownTakeUnpaid);
       const oDPW = safeNum(tx.ownDeliverPayWash);
       const oDPR = safeNum(tx.ownDeliverPayRefill);
@@ -1071,8 +1140,9 @@
             <div>
               ${showCustomerName ? `<h4 class="font-bold text-blue-900 mb-1 flex items-center"><i data-lucide="user" class="w-3.5 h-3.5 mr-1"></i> ${tx.customerName}</h4>` : ''}
               <p class="text-sm font-bold text-gray-500 flex items-center"><i data-lucide="history" class="w-3.5 h-3.5 mr-1"></i> ${window.formatDate(tx.timestamp)}</p>
-              <div class="flex gap-2 mt-1">
+              <div class="flex gap-1.5 mt-1 flex-wrap">
                 ${statusBadge}
+                ${tx.isRemoteArea ? `<span class="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-md font-bold inline-block">ส่งไกล(+ค่าส่ง)</span>` : ''}
                 <span class="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md font-bold inline-flex items-center"><i data-lucide="truck" class="w-3 h-3 mr-1"></i> ${tx.createdBy || 'ไม่ระบุ'}</span>
               </div>
             </div>
@@ -1428,7 +1498,7 @@
                     <span class="text-[10px] ml-2 px-2 py-0.5 rounded-full font-bold ${u.role === 'admin' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}">${u.role === 'admin' ? 'Admin' : 'Staff'}</span>
                   </div>
                   <div class="flex items-center gap-2">
-                    <span class="text-[10px] font-mono text-gray-400 mr-1 border bg-white px-1.5 rounded">PIN: ${u.role === 'admin' && window.currentUser.role !== 'super_admin' ? '****' : u.pin}</span>
+                    <span class="text-[10px] font-mono text-gray-400 mr-1 border bg-white px-1.5 rounded">PIN: ${u.role === 'admin' ? '****' : u.pin}</span>
                     <button onclick="window.editStaff('${u.id}')" class="p-1.5 bg-blue-50 text-blue-600 rounded-lg active:bg-blue-100"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i></button>
                     <button onclick="window.deleteStaff('${u.id}')" class="p-1.5 bg-red-50 text-red-600 rounded-lg active:bg-red-100"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
                   </div>
