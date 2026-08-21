@@ -3,6 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  
+  <!-- ตั้งค่าแอปพลิเคชัน & ไอคอนหน้าจอมือถือ (PWA) แบบไม่ต้องใช้ไฟล์ภาพ -->
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="ระบบน้ำดื่ม">
+  
+  <!-- รูปไอคอนสำหรับเบราว์เซอร์ และ Android -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%232563eb'/%3E%3Cpath d='M256 100 C256 100 128 280 128 360 A 128 128 0 0 0 384 360 C384 280 256 100 256 100 Z' fill='%23ffffff'/%3E%3Cpath d='M256 180 C256 180 160 300 160 360 A 96 96 0 0 0 352 360 C352 300 256 180 256 180 Z' fill='%23bfdbfe'/%3E%3C/svg%3E">
+  
+  <!-- รูปไอคอนสำหรับหน้าจอ iPhone/iPad -->
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' fill='%232563eb'/%3E%3Cpath d='M256 100 C256 100 128 280 128 360 A 128 128 0 0 0 384 360 C384 280 256 100 256 100 Z' fill='%23ffffff'/%3E%3Cpath d='M256 180 C256 180 160 300 160 360 A 96 96 0 0 0 352 360 C352 300 256 180 256 180 Z' fill='%23bfdbfe'/%3E%3C/svg%3E">
+  
+  <!-- สร้างไฟล์ Manifest เสมือน เพื่อให้ตั้งชื่อแอปตอนเซฟลงหน้าจอได้ -->
+  <link rel="manifest" href="data:application/manifest+json,{&quot;name&quot;:&quot;โรงงานน้ำดื่ม แม่จว้า หมู่ 8&quot;,&quot;short_name&quot;:&quot;ระบบน้ำดื่ม&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;#f3f4f6&quot;,&quot;theme_color&quot;:&quot;#2563eb&quot;,&quot;icons&quot;:[{&quot;src&quot;:&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%232563eb'/%3E%3Cpath d='M256 100 C256 100 128 280 128 360 A 128 128 0 0 0 384 360 C384 280 256 100 256 100 Z' fill='%23ffffff'/%3E%3Cpath d='M256 180 C256 180 160 300 160 360 A 96 96 0 0 0 352 360 C352 300 256 180 256 180 Z' fill='%23bfdbfe'/%3E%3C/svg%3E&quot;,&quot;sizes&quot;:&quot;512x512&quot;,&quot;type&quot;:&quot;image/svg+xml&quot;,&quot;purpose&quot;:&quot;any maskable&quot;}]}">
+
   <title>ระบบงาน โรงงานน้ำดื่ม แม่จว้า หมู่ 8</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
@@ -83,7 +99,7 @@
     window.searchQuery = '';
     window.selectedCustomerId = null;
 
-    // Report States (Updated)
+    // Report States
     window.reportMode = 'daily'; 
     const initD = new Date();
     const dStr = initD.getFullYear() + '-' + String(initD.getMonth()+1).padStart(2,'0') + '-' + String(initD.getDate()).padStart(2,'0');
@@ -185,14 +201,13 @@
     };
     window.safeNum = safeNum;
 
-    // ปรับ formatDate ให้แสดงปี พ.ศ. 4 หลัก (เพื่อแก้ปัญหาลง Excel)
     window.formatDate = (ts) => {
       if (!ts) return '-';
       try {
         const d = new Date(ts);
         const dd = String(d.getDate()).padStart(2, '0');
         const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const yyyy = d.getFullYear() + 543; // 4 digits
+        const yyyy = d.getFullYear() + 543; 
         const hr = String(d.getHours()).padStart(2, '0');
         const mn = String(d.getMinutes()).padStart(2, '0');
         return `${dd}/${mm}/${yyyy} ${hr}:${mn}`;
@@ -1165,7 +1180,7 @@
             <div class="flex justify-between items-end mb-4 px-2">
               <div>
                 <p class="text-gray-500 text-[10px] font-bold mb-0.5">
-                  ค่าบริการ ${calcTotal} + หหนี้เก่า ${safeNum(cust.debt)} ${window.isRemoteArea ? '<span class="text-amber-600">(+ส่งไกล)</span>' : ''}
+                  ค่าบริการ ${calcTotal} + หนี้เก่า ${safeNum(cust.debt)} ${window.isRemoteArea ? '<span class="text-amber-600">(+ส่งไกล)</span>' : ''}
                 </p>
                 <p class="text-sm text-gray-800 font-black">ต้องเก็บเงินรวม</p>
               </div>
