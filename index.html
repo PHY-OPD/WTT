@@ -81,8 +81,20 @@
     window.currentView = 'loading';
     window.selectedZone = 'ทั้งหมด';
     window.searchQuery = '';
-    window.reportPeriod = 'day';
     window.selectedCustomerId = null;
+
+    // Report States (Updated)
+    window.reportMode = 'daily'; 
+    const initD = new Date();
+    const dStr = initD.getFullYear() + '-' + String(initD.getMonth()+1).padStart(2,'0') + '-' + String(initD.getDate()).padStart(2,'0');
+    const mStr = initD.getFullYear() + '-' + String(initD.getMonth()+1).padStart(2,'0') + '-01';
+    window.reportDailyDate = dStr;
+    window.reportCustomStart = mStr;
+    window.reportCustomEnd = dStr;
+
+    // Export State
+    window.exportStartDate = mStr;
+    window.exportEndDate = dStr;
 
     // Delivery States
     window.deliveries = { orange: 0, purple: 0, crate: 0 };
@@ -107,10 +119,6 @@
     // User Management
     window.editingUserId = null;
     window.newUserRole = 'staff'; window.newUserName = ''; window.newUserPin = '';
-
-    const initDate = new Date();
-    window.exportStartDate = new Date(initDate.getFullYear(), initDate.getMonth(), 1).toISOString().split('T')[0];
-    window.exportEndDate = initDate.toISOString().split('T')[0];
 
     window.prices = { orange: 15, purple: 15, crate: 30, ownWash: 5, ownRefill: 15 };
 
@@ -177,29 +185,29 @@
     };
     window.safeNum = safeNum;
 
+    // ปรับ formatDate ให้แสดงปี พ.ศ. 4 หลัก (เพื่อแก้ปัญหาลง Excel)
     window.formatDate = (ts) => {
       if (!ts) return '-';
       try {
         const d = new Date(ts);
         const dd = String(d.getDate()).padStart(2, '0');
         const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const yy = (d.getFullYear() + 543).toString().slice(-2);
+        const yyyy = d.getFullYear() + 543; // 4 digits
         const hr = String(d.getHours()).padStart(2, '0');
         const mn = String(d.getMinutes()).padStart(2, '0');
-        return `${dd}/${mm}/${yy} ${hr}:${mn}`;
+        return `${dd}/${mm}/${yyyy} ${hr}:${mn}`;
       } catch(e) { return '-'; }
     };
 
-    // ฟังก์ชันสร้างโค้ด PromptPay มาตรฐาน (EMVCo) สำหรับการสแกนจ่าย
     window.generatePromptPayPayload = function(promptpayId, amount) {
       let id = promptpayId.replace(/[^0-9]/g, '');
       let billerId = '';
       if (id.length === 13) {
-        billerId = '0213' + id; // บัตรประชาชน
+        billerId = '0213' + id; 
       } else if (id.length === 10) {
-        billerId = '01130066' + id.substring(1); // เบอร์โทรศัพท์ (ใส่ 0066 อัตโนมัติ)
+        billerId = '01130066' + id.substring(1); 
       } else {
-        return null; // รูปแบบไม่ถูกต้อง
+        return null; 
       }
 
       let merchantInfo = '0016A000000677010111' + billerId;
@@ -209,9 +217,8 @@
         let amountStr = Number(amount).toFixed(2);
         payload += '54' + amountStr.length.toString().padStart(2, '0') + amountStr;
       }
-      payload += '6304'; // ต่อท้ายด้วย CRC16 Placeholder
+      payload += '6304';
 
-      // คำนวณ CRC16
       let crc = 0xFFFF;
       for (let i = 0; i < payload.length; i++) {
         crc ^= payload.charCodeAt(i) << 8;
@@ -688,10 +695,7 @@
       ];
       
       const rows = txList.map(tx => {
-        let paymentStr = 'ค้างจ่าย';
-        if (tx.paymentStatus === 'support') paymentStr = 'สนับสนุน(ฟรี)';
-        else if (tx.paymentStatus === 'paid') paymentStr = tx.paymentMethod === 'qr' ? 'โอนผ่าน QR' : 'เงินสด';
-
+        const paymentStr = tx.paymentStatus === 'paid' ? 'จ่ายแล้ว' : (tx.paymentStatus === 'support' ? 'สนับสนุน(ฟรี)' : 'ค้างจ่าย');
         const cashAmt = (tx.paymentStatus === 'paid' && tx.paymentMethod !== 'qr') ? safeNum(tx.amountCollected) : 0;
         const qrAmt = (tx.paymentStatus === 'paid' && tx.paymentMethod === 'qr') ? safeNum(tx.amountCollected) : 0;
 
@@ -1161,7 +1165,7 @@
             <div class="flex justify-between items-end mb-4 px-2">
               <div>
                 <p class="text-gray-500 text-[10px] font-bold mb-0.5">
-                  ค่าบริการ ${calcTotal} + หนี้เก่า ${safeNum(cust.debt)} ${window.isRemoteArea ? '<span class="text-amber-600">(+ส่งไกล)</span>' : ''}
+                  ค่าบริการ ${calcTotal} + หหนี้เก่า ${safeNum(cust.debt)} ${window.isRemoteArea ? '<span class="text-amber-600">(+ส่งไกล)</span>' : ''}
                 </p>
                 <p class="text-sm text-gray-800 font-black">ต้องเก็บเงินรวม</p>
               </div>
@@ -1289,97 +1293,78 @@
     function renderReports(container) {
       if(!['admin', 'super_admin'].includes(window.currentUser.role)) return;
 
-      const d = new Date();
-      let startDate = 0;
-      let endDate = Date.now();
+      const validTx = window.transactions.filter(t => t.status !== 'voided');
 
-      if (window.reportPeriod === 'day') {
-        startDate = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-      } else if (window.reportPeriod === 'week') { 
-        const wd = new Date(d); wd.setDate(d.getDate() - d.getDay()); wd.setHours(0,0,0,0); startDate = wd.getTime(); 
-      } else if (window.reportPeriod === 'month') {
-        startDate = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
-      } else if (window.reportPeriod === 'year') {
-        startDate = new Date(d.getFullYear(), 0, 1).getTime();
-      }
+      let reportHtml = '';
 
-      const txForReport = window.transactions.filter(t => t.timestamp >= startDate && t.timestamp <= endDate);
-      const validTx = txForReport.filter(t => t.status !== 'voided');
-
-      const stats = validTx.reduce((acc, tx) => {
-        if (tx.paymentStatus === 'support') {
-          acc.support += safeNum(tx.totalAmount);
-        } else if (tx.paymentStatus === 'paid') {
-          if (tx.paymentMethod === 'qr') acc.qrRev += safeNum(tx.amountCollected);
-          else acc.cashRev += safeNum(tx.amountCollected);
-          acc.rev += safeNum(tx.amountCollected);
-        }
-        acc.debt += safeNum(tx.addedDebt) > 0 ? safeNum(tx.addedDebt) : 0;
-
-        acc.dO += safeNum(tx.deliveries?.orange); acc.dP += safeNum(tx.deliveries?.purple); acc.dC += safeNum(tx.deliveries?.crate);
-        acc.rO += safeNum(tx.returns?.orange); acc.rP += safeNum(tx.returns?.purple); acc.rC += safeNum(tx.returns?.crate);
-        
-        acc.oW += safeNum(tx.ownTakeWash) + safeNum(tx.ownDeliverPayWash);
-        acc.oR += safeNum(tx.ownTakeRefill) + safeNum(tx.ownDeliverPayRefill);
-        acc.oRet += safeNum(tx.ownDeliverDone);
-        acc.oTU += safeNum(tx.ownTakeUnpaid);
-        
-        const creator = tx.createdBy || 'ไม่ระบุ';
-        if (!acc.staffCash[creator]) acc.staffCash[creator] = 0;
-        if (tx.paymentStatus === 'paid' && tx.paymentMethod !== 'qr') {
-            acc.staffCash[creator] += safeNum(tx.amountCollected);
+      if (window.reportMode === 'daily' || window.reportMode === 'custom') {
+        let txForReport = [];
+        if (window.reportMode === 'daily') {
+          const targetStr = window.reportDailyDate;
+          txForReport = validTx.filter(t => {
+            const d = new Date(t.timestamp);
+            const localStr = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+            return localStr === targetStr;
+          });
+        } else {
+          const s = new Date(window.reportCustomStart + "T00:00:00").getTime();
+          const e = new Date(window.reportCustomEnd + "T23:59:59").getTime();
+          txForReport = validTx.filter(t => t.timestamp >= s && t.timestamp <= e);
         }
 
-        return acc;
-      }, { rev: 0, cashRev: 0, qrRev: 0, debt: 0, support: 0, dO: 0, dP: 0, dC: 0, rO: 0, rP: 0, rC: 0, oW: 0, oR: 0, oRet: 0, oTU: 0, staffCash: {} });
+        const stats = txForReport.reduce((acc, tx) => {
+          if (tx.paymentStatus === 'support') {
+            acc.support += safeNum(tx.totalAmount);
+          } else if (tx.paymentStatus === 'paid') {
+            if (tx.paymentMethod === 'qr') acc.qrRev += safeNum(tx.amountCollected);
+            else acc.cashRev += safeNum(tx.amountCollected);
+            acc.rev += safeNum(tx.amountCollected);
+          }
+          acc.debt += safeNum(tx.addedDebt) > 0 ? safeNum(tx.addedDebt) : 0;
 
-      const totalDel = stats.dO + stats.dP + stats.dC;
-
-      const staffCashHTML = Object.keys(stats.staffCash).map(name => `
-        <div class="flex justify-between items-center py-2.5 border-b border-emerald-100/50 last:border-0">
-          <span class="text-sm font-bold text-emerald-800 flex items-center"><i data-lucide="truck" class="w-4 h-4 mr-2 text-emerald-600"></i> ${name}</span>
-          <span class="text-base font-black text-emerald-700">${stats.staffCash[name].toLocaleString()} ฿</span>
-        </div>
-      `).join('') || '<p class="text-sm text-emerald-600/50 text-center py-2">ไม่มีข้อมูล</p>';
-
-      const activeCustomers = window.customers.filter(c => safeNum(c.debt) > 0 || safeNum(c.stockOrange) > 0 || safeNum(c.stockPurple) > 0 || safeNum(c.stockCrate) > 0 || safeNum(c.stockOwnBottle) > 0)
-        .sort((a, b) => safeNum(b.debt) - safeNum(a.debt));
-
-      const totalCurrentDebt = activeCustomers.reduce((sum, c) => sum + safeNum(c.debt), 0);
-      const tO = activeCustomers.reduce((sum, c) => sum + safeNum(c.stockOrange), 0);
-      const tP = activeCustomers.reduce((sum, c) => sum + safeNum(c.stockPurple), 0);
-      const tC = activeCustomers.reduce((sum, c) => sum + safeNum(c.stockCrate), 0);
-      const tOwn = activeCustomers.reduce((sum, c) => sum + safeNum(c.stockOwnBottle), 0);
-
-      container.innerHTML = `
-        <div class="p-4 max-w-md mx-auto pb-24">
-          <div class="mb-6 flex items-end justify-between bg-blue-600 text-white p-5 rounded-b-3xl shadow-md -mt-4 -mx-4 pt-8">
-            <div><h1 class="text-2xl font-black tracking-tight">รายงานและบัญชี</h1></div>
-          </div>
+          acc.dO += safeNum(tx.deliveries?.orange); acc.dP += safeNum(tx.deliveries?.purple); acc.dC += safeNum(tx.deliveries?.crate);
+          acc.rO += safeNum(tx.returns?.orange); acc.rP += safeNum(tx.returns?.purple); acc.rC += safeNum(tx.returns?.crate);
           
-          <div class="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 mb-6">
-            <h3 class="text-sm font-bold text-gray-800 mb-3 flex items-center"><i data-lucide="calendar" class="w-4 h-4 mr-2 text-blue-500"></i> โหลดข้อมูลเข้า Excel</h3>
-            <div class="grid grid-cols-2 gap-2 mb-3">
-              <div>
-                <label class="text-[10px] font-bold text-gray-400 ml-1">ตั้งแต่วันที่</label>
-                <input type="date" id="export-start-date" value="${window.exportStartDate}" onchange="window.exportStartDate=this.value" class="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 bg-gray-50 outline-none" />
+          acc.oW += safeNum(tx.ownTakeWash) + safeNum(tx.ownDeliverPayWash);
+          acc.oR += safeNum(tx.ownTakeRefill) + safeNum(tx.ownDeliverPayRefill);
+          acc.oRet += safeNum(tx.ownDeliverDone);
+          acc.oTU += safeNum(tx.ownTakeUnpaid);
+          
+          const creator = tx.createdBy || 'ไม่ระบุ';
+          if (!acc.staffCash[creator]) acc.staffCash[creator] = 0;
+          if (tx.paymentStatus === 'paid' && tx.paymentMethod !== 'qr') {
+              acc.staffCash[creator] += safeNum(tx.amountCollected);
+          }
+
+          return acc;
+        }, { rev: 0, cashRev: 0, qrRev: 0, debt: 0, support: 0, dO: 0, dP: 0, dC: 0, rO: 0, rP: 0, rC: 0, oW: 0, oR: 0, oRet: 0, oTU: 0, staffCash: {} });
+
+        const totalDel = stats.dO + stats.dP + stats.dC;
+        const staffCashHTML = Object.keys(stats.staffCash).map(name => `
+          <div class="flex justify-between items-center py-2.5 border-b border-emerald-100/50 last:border-0">
+            <span class="text-sm font-bold text-emerald-800 flex items-center"><i data-lucide="truck" class="w-4 h-4 mr-2 text-emerald-600"></i> ${name}</span>
+            <span class="text-base font-black text-emerald-700">${stats.staffCash[name].toLocaleString()} ฿</span>
+          </div>
+        `).join('') || '<p class="text-sm text-emerald-600/50 text-center py-2">ไม่มีข้อมูล</p>';
+
+        reportHtml = `
+          ${window.reportMode === 'daily' ? `
+            <div class="mb-4 bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex items-center">
+              <label class="text-xs font-bold text-gray-500 mr-3 w-16">เลือกวันที่:</label>
+              <input type="date" value="${window.reportDailyDate}" onchange="window.reportDailyDate=this.value; window.render();" class="flex-1 px-3 py-2 text-sm rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 bg-gray-50 outline-none" />
+            </div>
+          ` : `
+            <div class="mb-4 bg-white p-3 rounded-2xl shadow-sm border border-gray-100">
+              <div class="flex items-center mb-2">
+                <label class="text-[10px] font-bold text-gray-400 w-12">ตั้งแต่:</label>
+                <input type="date" value="${window.reportCustomStart}" onchange="window.reportCustomStart=this.value; window.render();" class="flex-1 px-3 py-1.5 text-sm rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 bg-gray-50 outline-none" />
               </div>
-              <div>
-                <label class="text-[10px] font-bold text-gray-400 ml-1">ถึงวันที่</label>
-                <input type="date" id="export-end-date" value="${window.exportEndDate}" onchange="window.exportEndDate=this.value" class="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 bg-gray-50 outline-none" />
+              <div class="flex items-center">
+                <label class="text-[10px] font-bold text-gray-400 w-12">ถึง:</label>
+                <input type="date" value="${window.reportCustomEnd}" onchange="window.reportCustomEnd=this.value; window.render();" class="flex-1 px-3 py-1.5 text-sm rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 bg-gray-50 outline-none" />
               </div>
             </div>
-            <button onclick="window.downloadExcelRange()" class="w-full bg-green-600 text-white py-2.5 rounded-xl text-sm font-bold shadow-sm active:scale-95 flex items-center justify-center transition-transform"><i data-lucide="download" class="w-4 h-4 mr-1.5"></i> ดาวน์โหลดช่วงเวลานี้</button>
-          </div>
-
-          <h3 class="text-sm font-bold text-gray-800 mb-3 ml-1">สรุปยอดขายบนแอป</h3>
-          <div class="flex bg-gray-200 p-1 rounded-xl mb-4 shadow-inner">
-            ${['day', 'week', 'month', 'year'].map(p => `
-              <button onclick="window.reportPeriod='${p}'; window.render();" class="flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${window.reportPeriod === p ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500'}">
-                ${p === 'day' ? 'วันนี้' : p === 'week' ? 'สัปดาห์' : p === 'month' ? 'เดือน' : 'ปี'}
-              </button>
-            `).join('')}
-          </div>
+          `}
 
           <div class="grid grid-cols-2 gap-3 mb-4">
             <div class="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center items-center text-center">
@@ -1391,7 +1376,7 @@
               <span class="text-xl font-black text-blue-600">${stats.qrRev.toLocaleString()}</span>
             </div>
             <div class="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center items-center text-center">
-              <span class="text-gray-500 text-[10px] font-bold mb-1 flex items-center uppercase"><i data-lucide="alert-circle" class="w-3 h-3 mr-1 text-red-500"></i> ค้างจ่าย</span>
+              <span class="text-gray-500 text-[10px] font-bold mb-1 flex items-center uppercase"><i data-lucide="alert-circle" class="w-3 h-3 mr-1 text-red-500"></i> ค้างจ่ายเพิ่ม</span>
               <span class="text-xl font-black text-red-500">${stats.debt.toLocaleString()}</span>
             </div>
             <div class="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center items-center text-center">
@@ -1402,7 +1387,7 @@
 
           <div class="bg-emerald-50 p-5 rounded-3xl shadow-sm border border-emerald-100 mb-4">
             <h3 class="font-bold text-emerald-900 mb-3 flex items-center">
-              <i data-lucide="wallet" class="w-4.5 h-4.5 mr-2 text-emerald-600"></i> ยอดเก็บเงินสด (ที่ต้องส่งโรงงาน)
+              <i data-lucide="wallet" class="w-4.5 h-4.5 mr-2 text-emerald-600"></i> ยอดเก็บเงินสด (ที่พนักงานต้องส่ง)
             </h3>
             <div class="space-y-1">
               ${staffCashHTML}
@@ -1427,7 +1412,7 @@
             </div>
           </div>
 
-          <div class="bg-indigo-50 p-5 rounded-3xl shadow-sm border border-indigo-100 mb-4">
+          <div class="bg-indigo-50 p-5 rounded-3xl shadow-sm border border-indigo-100 mb-6">
             <h3 class="font-bold text-indigo-900 mb-3 flex items-center justify-between">
               <span class="flex items-center"><i data-lucide="archive" class="w-4.5 h-4.5 mr-2 text-indigo-600"></i> บริการถังลูกค้า</span>
             </h3>
@@ -1438,8 +1423,105 @@
               <div class="flex justify-between py-1 text-gray-500"><span>ส่งคืนเสร็จแล้ว</span><span>${stats.oRet}</span></div>
             </div>
           </div>
+        `;
+      } else if (window.reportMode === 'monthly' || window.reportMode === 'yearly') {
+        const grouped = {};
+        validTx.forEach(tx => {
+          const d = new Date(tx.timestamp);
+          let key = '';
+          let sortValue = 0;
+          if (window.reportMode === 'monthly') {
+            const mName = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"][d.getMonth()];
+            key = `${mName} ${d.getFullYear() + 543}`;
+            sortValue = d.getFullYear() * 100 + d.getMonth();
+          } else {
+            key = `ปี ${d.getFullYear() + 543}`;
+            sortValue = d.getFullYear();
+          }
 
-          <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-4">
+          if (!grouped[key]) {
+             grouped[key] = { key, sortValue, rev:0, cashRev:0, qrRev:0, debt:0, support:0, dO:0, dP:0, dC:0 };
+          }
+          
+          if (tx.paymentStatus === 'support') {
+            grouped[key].support += safeNum(tx.totalAmount);
+          } else if (tx.paymentStatus === 'paid') {
+            if (tx.paymentMethod === 'qr') grouped[key].qrRev += safeNum(tx.amountCollected);
+            else grouped[key].cashRev += safeNum(tx.amountCollected);
+            grouped[key].rev += safeNum(tx.amountCollected);
+          }
+          grouped[key].debt += safeNum(tx.addedDebt) > 0 ? safeNum(tx.addedDebt) : 0;
+          grouped[key].dO += safeNum(tx.deliveries?.orange);
+          grouped[key].dP += safeNum(tx.deliveries?.purple);
+          grouped[key].dC += safeNum(tx.deliveries?.crate);
+        });
+
+        const sortedGroups = Object.values(grouped).sort((a,b) => b.sortValue - a.sortValue);
+
+        reportHtml = `
+          <div class="space-y-3 mb-6">
+            ${sortedGroups.length === 0 ? '<p class="text-center text-gray-400 py-4">ไม่มีข้อมูล</p>' : sortedGroups.map(g => `
+              <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                <h3 class="font-black text-base text-blue-900 border-b border-gray-100 pb-2 mb-3 flex justify-between items-center">
+                  <span><i data-lucide="calendar" class="w-4 h-4 inline mr-1 text-blue-500"></i> ${g.key}</span>
+                  <span class="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100">รวมรับ ${g.rev.toLocaleString()} ฿</span>
+                </h3>
+                <div class="grid grid-cols-2 gap-2 text-sm mb-3">
+                  <div class="flex justify-between items-center bg-gray-50 px-2 py-1.5 rounded-lg"><span class="text-gray-500 text-[10px] font-bold">เงินสด:</span> <span class="font-black text-emerald-600">${g.cashRev.toLocaleString()}</span></div>
+                  <div class="flex justify-between items-center bg-gray-50 px-2 py-1.5 rounded-lg"><span class="text-gray-500 text-[10px] font-bold">โอน QR:</span> <span class="font-black text-blue-600">${g.qrRev.toLocaleString()}</span></div>
+                  <div class="flex justify-between items-center bg-gray-50 px-2 py-1.5 rounded-lg"><span class="text-gray-500 text-[10px] font-bold">ค้างจ่าย:</span> <span class="font-black text-red-500">${g.debt.toLocaleString()}</span></div>
+                  <div class="flex justify-between items-center bg-gray-50 px-2 py-1.5 rounded-lg"><span class="text-gray-500 text-[10px] font-bold">สนับสนุน:</span> <span class="font-black text-pink-500">${g.support.toLocaleString()}</span></div>
+                </div>
+                <div class="text-[10px] text-gray-500 flex gap-2 font-bold bg-blue-50/50 px-2 py-1.5 rounded-lg border border-blue-50">
+                  <span class="text-blue-800"><i data-lucide="package" class="w-3 h-3 inline mr-0.5"></i> ออก:</span> ส้ม <span class="text-orange-600">${g.dO}</span> | ม่วง <span class="text-purple-600">${g.dP}</span> | ลัง <span class="text-amber-700">${g.dC}</span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }
+
+      const activeCustomers = window.customers.filter(c => safeNum(c.debt) > 0 || safeNum(c.stockOrange) > 0 || safeNum(c.stockPurple) > 0 || safeNum(c.stockCrate) > 0 || safeNum(c.stockOwnBottle) > 0)
+        .sort((a, b) => safeNum(b.debt) - safeNum(a.debt));
+
+      const totalCurrentDebt = activeCustomers.reduce((sum, c) => sum + safeNum(c.debt), 0);
+      const tO = activeCustomers.reduce((sum, c) => sum + safeNum(c.stockOrange), 0);
+      const tP = activeCustomers.reduce((sum, c) => sum + safeNum(c.stockPurple), 0);
+      const tC = activeCustomers.reduce((sum, c) => sum + safeNum(c.stockCrate), 0);
+      const tOwn = activeCustomers.reduce((sum, c) => sum + safeNum(c.stockOwnBottle), 0);
+
+      container.innerHTML = `
+        <div class="p-4 max-w-md mx-auto pb-24">
+          <div class="mb-6 flex items-end justify-between bg-blue-600 text-white p-5 rounded-b-3xl shadow-md -mt-4 -mx-4 pt-8">
+            <div><h1 class="text-2xl font-black tracking-tight">รายงานและบัญชี</h1></div>
+          </div>
+          
+          <div class="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 mb-6">
+            <h3 class="text-sm font-bold text-gray-800 mb-3 flex items-center"><i data-lucide="file-spreadsheet" class="w-4 h-4 mr-2 text-green-600"></i> โหลดข้อมูลเข้า Excel</h3>
+            <div class="grid grid-cols-2 gap-2 mb-3">
+              <div>
+                <label class="text-[10px] font-bold text-gray-400 ml-1">ตั้งแต่วันที่</label>
+                <input type="date" id="export-start-date" value="${window.exportStartDate}" onchange="window.exportStartDate=this.value" class="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 focus:ring-2 focus:ring-green-500 bg-gray-50 outline-none" />
+              </div>
+              <div>
+                <label class="text-[10px] font-bold text-gray-400 ml-1">ถึงวันที่</label>
+                <input type="date" id="export-end-date" value="${window.exportEndDate}" onchange="window.exportEndDate=this.value" class="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 focus:ring-2 focus:ring-green-500 bg-gray-50 outline-none" />
+              </div>
+            </div>
+            <button onclick="window.downloadExcelRange()" class="w-full bg-green-600 text-white py-2.5 rounded-xl text-sm font-bold shadow-sm active:scale-95 flex items-center justify-center transition-transform"><i data-lucide="download" class="w-4 h-4 mr-1.5"></i> ดาวน์โหลดช่วงเวลานี้</button>
+          </div>
+
+          <h3 class="text-sm font-bold text-gray-800 mb-3 ml-1 flex items-center"><i data-lucide="bar-chart-2" class="w-4 h-4 mr-1 text-blue-500"></i> สรุปยอดขายบนแอป</h3>
+          <div class="flex bg-gray-200 p-1 rounded-xl mb-4 shadow-inner">
+            <button onclick="window.reportMode='daily'; window.render();" class="flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${window.reportMode === 'daily' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500'}">รายวัน</button>
+            <button onclick="window.reportMode='monthly'; window.render();" class="flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${window.reportMode === 'monthly' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500'}">รายเดือน</button>
+            <button onclick="window.reportMode='yearly'; window.render();" class="flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${window.reportMode === 'yearly' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500'}">รายปี</button>
+            <button onclick="window.reportMode='custom'; window.render();" class="flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${window.reportMode === 'custom' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500'}">กำหนดเอง</button>
+          </div>
+
+          ${reportHtml}
+
+          <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-4 mt-6">
             <h3 class="font-bold text-gray-800 mb-4 flex items-center"><i data-lucide="users" class="w-4.5 h-4.5 mr-2 text-indigo-500"></i> สรุปยอดค้าง ณ ปัจจุบัน (ทุกบ้าน)</h3>
             <div class="mb-4 pb-4 border-b border-gray-100">
               <div class="flex justify-between items-center mb-2">
