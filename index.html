@@ -13,13 +13,13 @@
   <meta name="apple-mobile-web-app-title" content="ระบบน้ำดื่ม">
 
   <script>
-    // สคริปต์วาดไอคอน PNG และสร้าง Manifest อัตโนมัติ (ถมพื้นหลังเต็มเพื่อแก้ขอบดำ)
+    // สคริปต์วาดไอคอน PNG และสร้าง Manifest อัตโนมัติ 
     (function() {
       const canvas = document.createElement('canvas');
       canvas.width = 512; canvas.height = 512;
       const ctx = canvas.getContext('2d');
       
-      // ถมพื้นหลังเป็นสีฟ้าเต็มพื้นที่ (กันขอบดำจาก Android)
+      // ถมพื้นหลังเป็นสีฟ้าเต็มพื้นที่ (เนียนไปกับพื้นหลังตอนโหลด)
       ctx.fillStyle = '#2563eb';
       ctx.fillRect(0, 0, 512, 512); 
       
@@ -37,7 +37,7 @@
         short_name: "ระบบน้ำดื่ม",
         start_url: window.location.pathname,
         display: "standalone",
-        background_color: "#f3f4f6",
+        background_color: "#2563eb", // เปลี่ยนพื้นหลัง Splash Screen เป็นสีฟ้า!
         theme_color: "#2563eb",
         icons: [{ src: iconUrl, sizes: "512x512", type: "image/png", purpose: "any maskable" }]
       };
@@ -83,9 +83,29 @@
 </head>
 <body class="bg-gray-100 font-sans text-gray-900 min-h-screen relative pb-20 selection:bg-blue-200">
 
-  <div id="loading-screen" class="fixed inset-0 bg-white z-[60] flex flex-col items-center justify-center transition-opacity duration-500">
-    <div class="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4"></div>
-    <p class="text-blue-800 font-bold">กำลังซิงค์ข้อมูล...</p>
+  <!-- หน้าจอโหลดเข้าแอปแบบแอนิเมชันสุดพรีเมียม -->
+  <div id="loading-screen" class="fixed inset-0 bg-blue-600 z-[70] flex flex-col items-center justify-center transition-all duration-700 ease-in-out opacity-100 scale-100">
+    <div class="relative flex items-center justify-center mb-8 -mt-10">
+      <!-- เอฟเฟกต์คลื่นน้ำกระจายตัว -->
+      <div class="absolute w-28 h-28 bg-white/20 rounded-full animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite]"></div>
+      <div class="absolute w-36 h-36 bg-white/10 rounded-full animate-[ping_2.5s_cubic-bezier(0,0,0.2,1)_infinite]" style="animation-delay: 0.5s"></div>
+      
+      <!-- โลโก้หยดน้ำเด้ง -->
+      <div class="relative z-10 w-24 h-24 bg-white rounded-[2rem] flex items-center justify-center shadow-2xl animate-bounce">
+        <i data-lucide="droplet" class="w-12 h-12 text-blue-600"></i>
+      </div>
+    </div>
+    
+    <h1 class="text-white text-2xl font-black tracking-tight mb-4 drop-shadow-md">ระบบน้ำดื่ม แม่จว้า</h1>
+    
+    <!-- แถบโหลดแบบแคปซูลใส -->
+    <div class="flex items-center text-blue-100 text-sm font-bold bg-black/15 px-5 py-2.5 rounded-full backdrop-blur-md border border-white/10 shadow-inner">
+      <svg class="animate-spin -ml-1 mr-2.5 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      </svg>
+      กำลังโหลดข้อมูล...
+    </div>
   </div>
 
   <div id="toast" class="fixed top-4 left-1/2 z-50 px-6 py-3 rounded-full shadow-2xl font-bold flex items-center text-white pointer-events-none w-max max-w-[90%]">
@@ -141,7 +161,6 @@
     window.searchQuery = '';
     window.selectedCustomerId = null;
 
-    // Report States
     window.reportMode = 'daily'; 
     const initD = new Date();
     const dStr = initD.getFullYear() + '-' + String(initD.getMonth()+1).padStart(2,'0') + '-' + String(initD.getDate()).padStart(2,'0');
@@ -153,7 +172,6 @@
     window.exportStartDate = mStr;
     window.exportEndDate = dStr;
 
-    // Delivery States
     window.deliveries = { orange: 0, purple: 0, crate: 0 };
     window.returns = { orange: 0, purple: 0, crate: 0 };
     window.ownTakeWash = 0; 
@@ -169,11 +187,9 @@
     window.paymentMethod = 'cash'; 
     window.txNote = '';
 
-    // Customer Form States
     window.formName = ''; window.formPhone = ''; window.formZone = '';
     window.formDebt = 0; window.formStockOrange = 0; window.formStockPurple = 0; window.formStockCrate = 0; window.formStockOwnBottle = 0;
 
-    // User Management
     window.editingUserId = null;
     window.newUserRole = 'staff'; window.newUserName = ''; window.newUserPin = '';
 
@@ -182,7 +198,6 @@
     let loaded = { cust: false, tx: false, users: false, stock: false };
     let isAppInitialized = false;
 
-    // ฟังก์ชันสั่งมือถือสั่น (Haptic Feedback)
     window.vibrate = function(pattern = 30) {
       if (navigator.vibrate) {
         navigator.vibrate(pattern);
@@ -210,11 +225,15 @@
       if (loaded.cust && loaded.tx && loaded.users && loaded.stock) {
         const loader = document.getElementById('loading-screen');
         if (loader && !loader.classList.contains('hidden')) {
-          loader.style.opacity = '0';
+          // หน่วงเวลาให้แอนิเมชันโชว์ความสวยงามนิดนึงก่อนเฟดออก (เพื่อความสมูท)
           setTimeout(() => {
-            loader.classList.add('hidden');
-            document.getElementById('bottom-nav').classList.remove('hidden');
-          }, 500);
+            loader.style.opacity = '0';
+            loader.style.transform = 'scale(1.05)';
+            setTimeout(() => {
+              loader.classList.add('hidden');
+              document.getElementById('bottom-nav').classList.remove('hidden');
+            }, 700);
+          }, 800);
         }
         if (!isAppInitialized) {
           isAppInitialized = true;
@@ -351,6 +370,13 @@
 
       window.currentView = viewName;
       if (param) window.selectedCustomerId = param;
+
+      const appCont = document.getElementById('app-container');
+      if (appCont) {
+        appCont.classList.remove('page-transition');
+        void appCont.offsetWidth; 
+        appCont.classList.add('page-transition');
+      }
 
       const navContainer = document.getElementById('bottom-nav');
       if (window.currentUser) {
@@ -845,7 +871,7 @@
 
     function renderLogin(container) {
       container.innerHTML = `
-        <div class="p-6 max-w-sm mx-auto min-h-screen flex flex-col justify-center pb-20 page-transition">
+        <div class="p-6 max-w-sm mx-auto min-h-screen flex flex-col justify-center pb-20">
           <div class="text-center mb-8">
             <div class="bg-blue-100 text-blue-600 w-24 h-24 rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-sm"><i data-lucide="droplet" class="w-12 h-12"></i></div>
             <h1 class="text-2xl font-black text-blue-900 leading-tight">ระบบงาน<br/>โรงงานน้ำดื่ม แม่จว้า หมู่ 8</h1>
@@ -881,7 +907,7 @@
       }
 
       container.innerHTML = `
-        <div class="pb-24 page-transition">
+        <div class="pb-24">
           <div class="sticky top-0 z-30 bg-white/85 backdrop-blur-xl border-b border-gray-100 px-4 pt-6 pb-4 shadow-sm">
             <div class="flex justify-between items-end mb-4">
               <div>
@@ -943,7 +969,7 @@
       const isEdit = window.currentView === 'editCustomer';
       
       container.innerHTML = `
-        <div class="p-4 page-transition pb-24">
+        <div class="p-4 pb-24">
           <div class="flex items-center justify-between mb-6 pt-2 sticky top-2 z-20">
             <div class="flex items-center">
               <button onclick="window.switchView('${isEdit ? 'delivery' : 'list'}')" class="p-2.5 mr-3 bg-white/80 backdrop-blur-md rounded-full shadow-sm text-gray-600 active:scale-90 transition-all border border-gray-100"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
@@ -1032,15 +1058,12 @@
         if (window.globalStock.promptpayNumber) {
           const payload = window.generatePromptPayPayload(window.globalStock.promptpayNumber, totalToCollect);
           if (payload) {
-            // เพิ่มตัว Loading Spinner ให้ QR Code
             qrHtml = `
               <div class="bg-white p-3 rounded-[2rem] shadow-sm border border-gray-200 mb-4 relative flex justify-center items-center w-56 h-56 mx-auto overflow-hidden">
-                
                 <div id="qr-spinner" class="absolute inset-0 flex flex-col items-center justify-center bg-white rounded-[2rem] z-10">
                   <div class="w-8 h-8 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin mb-3"></div>
                   <span class="text-[11px] text-blue-500 font-bold tracking-wider">กำลังโหลด QR...</span>
                 </div>
-
                 <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(payload)}" class="w-full h-full object-contain relative z-20 opacity-0 transition-opacity duration-500" alt="QR Code" onload="document.getElementById('qr-spinner').style.display='none'; this.classList.remove('opacity-0');" />
               </div>
               <p class="text-base font-black text-blue-800 bg-blue-50 px-6 py-2.5 rounded-full border border-blue-200 shadow-sm text-center mx-auto w-max">ยอดโอน: ${totalToCollect} บาท</p>
@@ -1067,7 +1090,7 @@
       }
 
       container.innerHTML = `
-        <div class="pb-44 relative page-transition">
+        <div class="pb-44 relative">
           <div class="bg-white/85 backdrop-blur-xl px-4 py-3.5 shadow-sm sticky top-0 z-30 flex items-center justify-between border-b border-gray-100/50">
             <div class="flex items-center">
               <button onclick="window.switchView('list')" class="mr-3 p-2.5 bg-gray-50/80 rounded-full text-gray-700 active:scale-90 transition-all border border-gray-200"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
@@ -1143,7 +1166,7 @@
                   </div>
                 </div>
                 <div class="flex justify-between items-center py-2.5 border-b border-gray-50">
-                  <span class="font-bold text-gray-700 text-[13px] leading-tight w-1/2">รับถังมาล้างเปล่า<br><span class="text-indigo-500 text-[11px] font-semibold">(เก็บเงินเลย 5฿)</span></span>
+                  <span class="font-bold text-gray-700 text-[13px] leading-tight w-1/2">รับถังมาล้างอย่างเดียว<br><span class="text-indigo-500 text-[11px] font-semibold">(เก็บเงินเลย 5฿)</span></span>
                   <div class="flex items-center gap-1 bg-gray-50 p-1 rounded-full border border-gray-100">
                     <button onclick="window.updateOwnQty('ownTakeWash', -1)" class="w-9 h-9 rounded-full bg-white flex items-center justify-center text-gray-600 active:scale-90 transition-transform shadow-sm shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
                     <input type="text" inputmode="numeric" pattern="[0-9]*" id="own-take-wash-input" value="${window.ownTakeWash}" onchange="window.setOwnQty('ownTakeWash', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-indigo-700 bg-transparent border-none p-0 focus:ring-0 outline-none" />
@@ -1151,7 +1174,7 @@
                   </div>
                 </div>
                 <div class="flex justify-between items-center py-2.5 bg-gray-50 -mx-5 px-5 pb-4 mt-3 rounded-b-[1.5rem] border-t border-gray-100">
-                  <span class="font-bold text-gray-600 text-[13px]"><i data-lucide="corner-up-left" class="w-3.5 h-3.5 inline mr-1 text-gray-400"></i>ส่งคืนลูกค้า (ทำเสร็จแล้ว)</span>
+                  <span class="font-bold text-gray-600 text-[13px]"><i data-lucide="corner-up-left" class="w-3.5 h-3.5 inline mr-1 text-gray-400"></i>ส่งคืนถังลูกค้า (ทำเสร็จแล้ว)</span>
                   <div class="flex items-center gap-1 bg-white p-1 rounded-full border border-gray-200">
                     <button onclick="window.updateOwnQty('ownDeliverDone', -1)" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 active:scale-90 transition-transform shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
                     <input type="text" inputmode="numeric" pattern="[0-9]*" id="own-deliver-done-input" value="${window.ownDeliverDone}" onchange="window.setOwnQty('ownDeliverDone', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-700 bg-transparent border-none p-0 focus:ring-0 outline-none" />
@@ -1243,12 +1266,12 @@
                       </div>
                     </div>
                     ${window.cashReceived !== '' ? `
-                      <div class="p-4 rounded-[1rem] text-center font-bold text-base shadow-inner ${changeAmount >= 0 ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'} animate-fade-in">
+                      <div class="p-4 rounded-[1rem] text-center font-bold text-base shadow-inner ${changeAmount >= 0 ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}">
                         ${changeAmount >= 0 ? `💵 ทอนเงินลูกค้า: <span class="text-3xl font-black text-emerald-600 ml-2 block mt-1">${changeAmount.toLocaleString()} ฿</span>` : `⚠️ เงินไม่พอ: ขาดอีก <span class="text-xl font-black text-red-600 ml-1">${Math.abs(changeAmount).toLocaleString()} ฿</span>`}
                       </div>
                     ` : ''}
                   ` : `
-                    <div class="flex flex-col items-center justify-center p-2 w-full animate-fade-in">
+                    <div class="flex flex-col items-center justify-center p-2 w-full">
                       ${qrHtml}
                     </div>
                   `}
@@ -1675,50 +1698,52 @@
       const myReturns = myTx.reduce((acc, t) => acc + safeNum(t.returns?.orange) + safeNum(t.returns?.purple) + safeNum(t.returns?.crate), 0);
 
       container.innerHTML = `
-        <div class="p-4 max-w-md mx-auto pb-24 page-transition">
-          <div class="mb-6 flex items-end bg-indigo-600 text-white px-5 pt-8 pb-6 rounded-b-[2rem] shadow-lg shadow-indigo-600/20 -mt-4 -mx-4">
+        <div class="pb-24 page-transition">
+          <div class="mb-6 flex items-end bg-indigo-600 text-white px-5 pt-8 pb-6 rounded-b-[2rem] shadow-lg shadow-indigo-600/20 sticky top-0 z-20">
             <div><h1 class="text-2xl font-black tracking-tight flex items-center"><i data-lucide="user" class="w-6 h-6 mr-2"></i> โปรไฟล์ของฉัน</h1></div>
           </div>
           
-          <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 mb-5 text-center relative overflow-hidden">
-            <div class="w-24 h-24 bg-indigo-50 text-indigo-600 rounded-full mx-auto flex items-center justify-center mb-4 border-4 border-white shadow-md"><i data-lucide="user" class="w-12 h-12"></i></div>
-            <h2 class="font-black text-2xl text-gray-800">${window.currentUser.name}</h2>
-            <p class="text-xs font-bold text-gray-400 mb-6 uppercase tracking-widest mt-1">พนักงานส่งน้ำ</p>
-            
-            <div class="bg-gray-50/80 rounded-2xl p-5 mb-6 border border-gray-100 text-left">
-              <p class="text-xs font-black text-indigo-800 mb-4 text-center border-b border-gray-200 pb-3 uppercase tracking-wider">ผลงานของฉันวันนี้</p>
+          <div class="px-4">
+            <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 mb-5 text-center relative overflow-hidden">
+              <div class="w-24 h-24 bg-indigo-50 text-indigo-600 rounded-full mx-auto flex items-center justify-center mb-4 border-4 border-white shadow-md"><i data-lucide="user" class="w-12 h-12"></i></div>
+              <h2 class="font-black text-2xl text-gray-800">${window.currentUser.name}</h2>
+              <p class="text-xs font-bold text-gray-400 mb-6 uppercase tracking-widest mt-1">พนักงานส่งน้ำ</p>
               
-              <div class="flex justify-between items-center mb-2">
-                <span class="text-sm font-bold text-gray-700">รับเงินสด (ส่งโรงงาน):</span>
-                <span class="text-xl font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100">${myCash.toLocaleString()} ฿</span>
-              </div>
-              <div class="flex justify-between items-center mb-4 pb-4 border-b border-gray-200">
-                <span class="text-sm font-bold text-gray-700">ลูกค้าโอน QR:</span>
-                <span class="text-lg font-black text-blue-600">${myQR.toLocaleString()} ฿</span>
-              </div>
-              
-              <div class="flex justify-between items-center mb-2">
-                <span class="text-xs font-bold text-gray-500">บิลสนับสนุน (ให้ฟรี):</span>
-                <span class="text-sm font-black text-pink-500">${mySupport.toLocaleString()} ฿</span>
-              </div>
-              
-              <div class="flex justify-between items-center mb-2">
-                <span class="text-xs font-bold text-gray-600"><i data-lucide="droplet" class="w-3 h-3 inline mr-1 text-blue-500"></i>น้ำโรงงาน (ส่งแล้ว):</span>
-                <span class="text-sm font-black text-blue-600">${myDels} <span class="text-[10px] font-semibold text-gray-400">ถัง/ลัง</span></span>
-              </div>
-              
-              <div class="flex justify-between items-center mb-2">
-                <span class="text-xs font-bold text-gray-600"><i data-lucide="check-circle" class="w-3 h-3 inline mr-1 text-gray-400"></i>น้ำโรงงาน (รับคืน):</span>
-                <span class="text-sm font-black text-gray-600">${myReturns} <span class="text-[10px] font-semibold text-gray-400">ถัง/ลัง</span></span>
+              <div class="bg-gray-50/80 rounded-2xl p-5 mb-6 border border-gray-100 text-left">
+                <p class="text-xs font-black text-indigo-800 mb-4 text-center border-b border-gray-200 pb-3 uppercase tracking-wider">ผลงานของฉันวันนี้</p>
+                
+                <div class="flex justify-between items-center mb-2">
+                  <span class="text-sm font-bold text-gray-700">รับเงินสด (ส่งโรงงาน):</span>
+                  <span class="text-xl font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100">${myCash.toLocaleString()} ฿</span>
+                </div>
+                <div class="flex justify-between items-center mb-4 pb-4 border-b border-gray-200">
+                  <span class="text-sm font-bold text-gray-700">ลูกค้าโอน QR:</span>
+                  <span class="text-lg font-black text-blue-600">${myQR.toLocaleString()} ฿</span>
+                </div>
+                
+                <div class="flex justify-between items-center mb-2">
+                  <span class="text-xs font-bold text-gray-500">บิลสนับสนุน (ให้ฟรี):</span>
+                  <span class="text-sm font-black text-pink-500">${mySupport.toLocaleString()} ฿</span>
+                </div>
+                
+                <div class="flex justify-between items-center mb-2">
+                  <span class="text-xs font-bold text-gray-600"><i data-lucide="droplet" class="w-3 h-3 inline mr-1 text-blue-500"></i>น้ำโรงงาน (ส่งแล้ว):</span>
+                  <span class="text-sm font-black text-blue-600">${myDels} <span class="text-[10px] font-semibold text-gray-400">ถัง/ลัง</span></span>
+                </div>
+                
+                <div class="flex justify-between items-center mb-2">
+                  <span class="text-xs font-bold text-gray-600"><i data-lucide="check-circle" class="w-3 h-3 inline mr-1 text-gray-400"></i>น้ำโรงงาน (รับคืน):</span>
+                  <span class="text-sm font-black text-gray-600">${myReturns} <span class="text-[10px] font-semibold text-gray-400">ถัง/ลัง</span></span>
+                </div>
+
+                <div class="flex justify-between items-center mt-3 pt-3 border-t border-gray-100">
+                  <span class="text-xs font-bold text-gray-600"><i data-lucide="archive" class="w-3 h-3 inline mr-1 text-indigo-500"></i>บริการถังส่วนตัว:</span>
+                  <span class="text-sm font-black text-indigo-600">${myOwn} <span class="text-[10px] font-semibold text-gray-400">ใบ</span></span>
+                </div>
               </div>
 
-              <div class="flex justify-between items-center mt-3 pt-3 border-t border-gray-100">
-                <span class="text-xs font-bold text-gray-600"><i data-lucide="archive" class="w-3 h-3 inline mr-1 text-indigo-500"></i>บริการถังส่วนตัว:</span>
-                <span class="text-sm font-black text-indigo-600">${myOwn} <span class="text-[10px] font-semibold text-gray-400">ใบ</span></span>
-              </div>
+              <button onclick="window.logout()" class="w-full py-4 bg-red-50 text-red-600 rounded-2xl font-black text-sm active:scale-95 transition-all shadow-sm border border-red-100">ออกจากระบบ</button>
             </div>
-
-            <button onclick="window.logout()" class="w-full py-4 bg-red-50 text-red-600 rounded-2xl font-black text-sm active:scale-95 transition-all shadow-sm border border-red-100">ออกจากระบบ</button>
           </div>
         </div>
       `;
