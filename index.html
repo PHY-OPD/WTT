@@ -49,7 +49,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   <style>
-    /* ป้องกันการเด้งแบบยางยืดของเบราว์เซอร์ */
+    /* ป้องกันการเด้งแบบยางยืดของเบราว์เซอร์ในมือถือ */
     body { overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; }
     
     .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -77,7 +77,7 @@
     }
   </style>
 </head>
-<body class="bg-gray-100 font-sans text-gray-900 min-h-screen relative pb-20 selection:bg-blue-200">
+<body class="bg-gray-50 font-sans text-gray-900 min-h-screen relative selection:bg-blue-200">
 
   <!-- หน้าจอโหลดเข้าแอปแบบแอนิเมชัน -->
   <div id="loading-screen" class="fixed inset-0 bg-blue-600 z-[70] flex flex-col items-center justify-center transition-all duration-500 ease-in-out opacity-100 scale-100">
@@ -103,10 +103,17 @@
     <span id="toast-msg" class="text-sm"></span>
   </div>
 
-  <div id="app-container" class="max-w-md mx-auto min-h-screen relative bg-gray-100"></div>
+  <!-- โครงสร้างหลัก (Responsive Layout) -->
+  <!-- แถบด้านข้างสำหรับคอมพิวเตอร์ -->
+  <div id="side-nav" class="hidden md:flex w-64 bg-slate-900 text-slate-300 flex-col fixed inset-y-0 left-0 z-40 shadow-2xl transition-transform"></div>
 
-  <!-- แถบเมนูด้านล่างแบบกระจกฝ้า -->
-  <div id="bottom-nav" class="fixed bottom-0 left-0 right-0 bg-white/85 backdrop-blur-xl border-t border-gray-200/50 pb-safe pt-2 px-6 shadow-[0_-5px_20px_-5px_rgba(0,0,0,0.08)] max-w-md mx-auto z-40 flex justify-around items-center hidden"></div>
+  <!-- พื้นที่แสดงข้อมูลหลัก -->
+  <div id="main-wrapper" class="flex-1 flex flex-col min-w-0 transition-all duration-300 min-h-screen">
+    <div id="app-container" class="w-full mx-auto relative md:max-w-5xl lg:max-w-6xl pb-20 md:pb-8"></div>
+  </div>
+
+  <!-- แถบเมนูด้านล่างสำหรับมือถือ -->
+  <div id="bottom-nav" class="md:hidden fixed bottom-0 left-0 right-0 bg-white/85 backdrop-blur-xl border-t border-gray-200/50 pb-safe pt-2 px-6 shadow-[0_-5px_20px_-5px_rgba(0,0,0,0.08)] z-40 flex justify-around items-center hidden"></div>
 
   <div id="confirm-modal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm hidden">
     <div class="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl">
@@ -136,7 +143,6 @@
     };
 
     const app = initializeApp(firebaseConfig);
-    // เปิดระบบ Offline Mode รองรับที่ไม่มีสัญญาณเน็ต
     const db = initializeFirestore(app, {
       localCache: persistentLocalCache({tabManager: persistentMultipleTabManager()})
     });
@@ -154,7 +160,6 @@
     window.searchQuery = '';
     window.selectedCustomerId = null;
 
-    // Report States
     window.reportMode = 'daily'; 
     const initD = new Date();
     const dStr = initD.getFullYear() + '-' + String(initD.getMonth()+1).padStart(2,'0') + '-' + String(initD.getDate()).padStart(2,'0');
@@ -162,10 +167,10 @@
     window.reportDailyDate = dStr;
     window.reportCustomStart = mStr;
     window.reportCustomEnd = dStr;
+
     window.exportStartDate = mStr;
     window.exportEndDate = dStr;
 
-    // Delivery States
     window.deliveries = { orange: 0, purple: 0, crate: 0 };
     window.returns = { orange: 0, purple: 0, crate: 0 };
     window.ownTakeWash = 0; 
@@ -192,16 +197,37 @@
     let loaded = { cust: false, tx: false, users: false, stock: false };
     let isAppInitialized = false;
 
-    // ฟังก์ชันสั่งมือถือสั่น
     window.vibrate = function(pattern = 30) {
       if (navigator.vibrate) navigator.vibrate(pattern);
     };
 
-    // ฟังก์ชันสั่งซ่อนคีย์บอร์ดมือถืออัตโนมัติ
     window.hideKeyboard = function() {
       if (document.activeElement && typeof document.activeElement.blur === 'function') {
         document.activeElement.blur();
       }
+    };
+
+    window.transitionWithLoading = function(viewName, msg) {
+      window.hideKeyboard();
+      const loader = document.getElementById('loading-screen');
+      const loaderText = document.getElementById('loading-text');
+      if (loaderText) loaderText.innerText = msg || 'กำลังประมวลผล...';
+      
+      loader.classList.remove('hidden');
+      void loader.offsetWidth; 
+      loader.style.opacity = '1';
+      loader.style.transform = 'scale(1)';
+      
+      setTimeout(() => {
+        window.switchView(viewName);
+        setTimeout(() => {
+          loader.style.opacity = '0';
+          loader.style.transform = 'scale(1.05)';
+          setTimeout(() => {
+            loader.classList.add('hidden');
+          }, 500);
+        }, 400); 
+      }, 300); 
     };
 
     onSnapshot(collection(db, "customers"), (snap) => { window.customers = snap.docs.map(d => ({ id: d.id, ...d.data() })); checkLoad('cust'); });
@@ -231,7 +257,7 @@
             setTimeout(() => {
               loader.classList.add('hidden');
             }, 500);
-          }, 400); // ดึงหน้าโหลดออกเร็วขึ้น
+          }, 400);
         }
         if (!isAppInitialized) {
           isAppInitialized = true;
@@ -245,7 +271,7 @@
     function checkWelcomeToast() {
       const welcomeName = sessionStorage.getItem('show_welcome_toast');
       if (welcomeName) {
-        setTimeout(() => window.showToast(`เข้าสู่ระบบสำเร็จ: ${welcomeName}`), 600);
+        setTimeout(() => window.showToast(welcomeName.includes('เรียบร้อย') ? welcomeName : `เข้าสู่ระบบสำเร็จ: ${welcomeName}`), 600);
         sessionStorage.removeItem('show_welcome_toast');
       }
     }
@@ -390,34 +416,72 @@
       }
 
       const navContainer = document.getElementById('bottom-nav');
+      const sideNav = document.getElementById('side-nav');
+      const mainWrapper = document.getElementById('main-wrapper');
+
       if (window.currentUser) {
-        if (['admin', 'super_admin'].includes(window.currentUser.role)) {
-          navContainer.innerHTML = `
-            <button onclick="window.switchView('list')" class="flex flex-col items-center p-2 ${viewName==='list'?'text-blue-600':'text-gray-400'} active:scale-90 transition-all"><i data-lucide="home" class="w-6 h-6 mb-1"></i><span class="text-[10px] font-bold">ลูกค้า</span></button>
-            <button onclick="window.switchView('historyAll')" class="flex flex-col items-center p-2 ${viewName==='historyAll'?'text-blue-600':'text-gray-400'} active:scale-90 transition-all"><i data-lucide="file-text" class="w-6 h-6 mb-1"></i><span class="text-[10px] font-bold">บิลล่าสุด</span></button>
-            <button onclick="window.switchView('reports')" class="flex flex-col items-center p-2 ${viewName==='reports'?'text-blue-600':'text-gray-400'} active:scale-90 transition-all"><i data-lucide="bar-chart-2" class="w-6 h-6 mb-1"></i><span class="text-[10px] font-bold">รายงาน</span></button>
-            <button onclick="window.switchView('adminStock')" class="flex flex-col items-center p-2 ${viewName==='adminStock'?'text-blue-600':'text-gray-400'} active:scale-90 transition-all"><i data-lucide="database" class="w-6 h-6 mb-1"></i><span class="text-[10px] font-bold">จัดการ</span></button>
-          `;
-        } else {
-          navContainer.innerHTML = `
-            <button onclick="window.switchView('list')" class="flex flex-col items-center p-2 ${viewName==='list'?'text-blue-600':'text-gray-400'} active:scale-90 transition-all"><i data-lucide="home" class="w-6 h-6 mb-1"></i><span class="text-[10px] font-bold">ลูกค้า</span></button>
-            <button onclick="window.switchView('historyAll')" class="flex flex-col items-center p-2 ${viewName==='historyAll'?'text-blue-600':'text-gray-400'} active:scale-90 transition-all"><i data-lucide="file-text" class="w-6 h-6 mb-1"></i><span class="text-[10px] font-bold">บิลล่าสุด</span></button>
-            <button onclick="window.switchView('stats')" class="flex flex-col items-center p-2 ${viewName==='stats'?'text-blue-600':'text-gray-400'} active:scale-90 transition-all"><i data-lucide="user" class="w-6 h-6 mb-1"></i><span class="text-[10px] font-bold">โปรไฟล์ฉัน</span></button>
-          `;
-        }
+        const isAdmin = ['admin', 'super_admin'].includes(window.currentUser.role);
+        const menuItems = isAdmin ? [
+          { id: 'list', icon: 'home', label: 'ลูกค้า' },
+          { id: 'historyAll', icon: 'file-text', label: 'บิลล่าสุด' },
+          { id: 'reports', icon: 'bar-chart-2', label: 'รายงาน' },
+          { id: 'adminStock', icon: 'database', label: 'จัดการ' }
+        ] : [
+          { id: 'list', icon: 'home', label: 'ลูกค้า' },
+          { id: 'historyAll', icon: 'file-text', label: 'บิลล่าสุด' },
+          { id: 'stats', icon: 'user', label: 'โปรไฟล์ฉัน' }
+        ];
+
+        // 📱 เมนูมือถือ
+        navContainer.innerHTML = menuItems.map(m => `
+          <button onclick="window.switchView('${m.id}')" class="flex flex-col items-center p-2 ${viewName===m.id?'text-blue-600':'text-gray-400'} active:scale-90 transition-all">
+            <i data-lucide="${m.icon}" class="w-6 h-6 mb-1"></i><span class="text-[10px] font-bold">${m.label}</span>
+          </button>
+        `).join('');
+
+        // 💻 เมนูคอมพิวเตอร์ (Sidebar)
+        sideNav.innerHTML = `
+          <div class="p-6 flex items-center gap-3 bg-slate-950 shadow-md">
+             <div class="bg-blue-600 p-2 rounded-xl text-white shadow-lg shadow-blue-600/30"><i data-lucide="droplet" class="w-6 h-6"></i></div>
+             <div>
+               <h1 class="font-black text-white text-lg leading-tight">แม่จว้า ม.8</h1>
+               <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">${window.currentUser.name}</p>
+             </div>
+          </div>
+          <div class="p-4 space-y-2 flex-1 mt-2">
+             ${menuItems.map(m => `
+               <button onclick="window.switchView('${m.id}')" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all ${viewName===m.id?'bg-blue-600 text-white shadow-lg shadow-blue-600/30':'text-slate-400 hover:bg-slate-800 hover:text-white'}">
+                 <i data-lucide="${m.icon}" class="w-5 h-5"></i> ${m.label}
+               </button>
+             `).join('')}
+          </div>
+          <div class="p-4">
+             <button onclick="window.logout()" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold text-red-400 hover:bg-red-500/10 transition-all">
+               <i data-lucide="log-out" class="w-5 h-5"></i> ออกจากระบบ
+             </button>
+          </div>
+        `;
       }
 
-      if (['login', 'addCustomer', 'editCustomer', 'delivery', 'history', 'stockList'].includes(viewName)) {
+      // ซ่อน/แสดง เมนูและจัด Layout ตามหน้า
+      if (viewName === 'login') {
         navContainer.classList.add('hidden');
+        sideNav.classList.add('md:hidden');
+        mainWrapper.classList.remove('md:pl-64');
+      } else if (['addCustomer', 'editCustomer', 'delivery', 'history'].includes(viewName)) {
+        navContainer.classList.add('hidden');
+        sideNav.classList.remove('md:hidden');
+        mainWrapper.classList.add('md:pl-64');
       } else {
         navContainer.classList.remove('hidden');
+        sideNav.classList.remove('md:hidden');
+        mainWrapper.classList.add('md:pl-64');
       }
 
       window.render();
-      window.scrollTo(0, 0); // รีเซ็ตตำแหน่งจอให้อยู่บนสุดเสมอ
+      window.scrollTo(0, 0); 
     };
 
-    // ✅ ฟังก์ชันออกจากระบบแบบ Hard Reload เคลียร์แอป 100%
     window.logout = function() {
       window.vibrate(50);
       localStorage.removeItem('water_app_user_id');
@@ -436,10 +500,9 @@
       }, 300);
     };
 
-    // ✅ ฟังก์ชัน Login ฉบับสมบูรณ์ (The Ultimate Fix): ใช้ Hard Reload แก้ปัญหาหน้าจอค้าง
     window.loginUser = function() {
       window.vibrate(30);
-      window.hideKeyboard(); // บังคับพับแป้นพิมพ์ทันที
+      window.hideKeyboard(); 
 
       const userId = document.getElementById('login-user-select').value;
       const pinInput = document.getElementById('login-pin');
@@ -456,7 +519,6 @@
         submitBtn.disabled = true;
       }
 
-      // โชว์หน้าต่างโหลดแบบเต็มจอ บังจังหวะที่จอมือถือจะกระตุก
       const loader = document.getElementById('loading-screen');
       const loaderText = document.getElementById('loading-text');
       if (loaderText) loaderText.innerText = 'กำลังตรวจสอบข้อมูล...';
@@ -465,13 +527,12 @@
       loader.style.opacity = '1';
       loader.style.transform = 'scale(1)';
 
-      // หน่วงเวลาให้แป้นพิมพ์พับลงสุด แล้วสั่ง Reload ทันที!
       setTimeout(() => {
         if (userId === SUPER_ADMIN_ACCOUNT.id) {
           if (pin === SUPER_ADMIN_ACCOUNT.pin) {
             localStorage.setItem('water_app_user_id', SUPER_ADMIN_ACCOUNT.id);
             sessionStorage.setItem('show_welcome_toast', SUPER_ADMIN_ACCOUNT.name);
-            window.location.reload(); // <--- จุดสำคัญ: ล้างแคชแล้วเข้าหน้าหลัก
+            window.location.reload(); 
             return;
           } else {
             loader.style.opacity = '0';
@@ -487,7 +548,7 @@
         if (user && user.pin === pin) {
           localStorage.setItem('water_app_user_id', user.id);
           sessionStorage.setItem('show_welcome_toast', user.name);
-          window.location.reload(); // <--- จุดสำคัญ: ล้างแคชแล้วเข้าหน้าหลัก
+          window.location.reload(); 
         } else {
           loader.style.opacity = '0';
           setTimeout(() => loader.classList.add('hidden'), 300);
@@ -709,7 +770,6 @@
         updateData.stockOwnBottle = Math.max(0, safeNum(window.formStockOwnBottle));
       }
 
-      // โชว์หน้าต่างโหลดแบบเต็มจอ บังจังหวะที่จอมือถือจะกระตุก
       const loader = document.getElementById('loading-screen');
       const loaderText = document.getElementById('loading-text');
       if (loaderText) loaderText.innerText = 'กำลังบันทึกข้อมูล...';
@@ -733,7 +793,7 @@
           window.formName = ''; window.formPhone = ''; window.formZone = '';
           window.selectedZone = zone; window.searchQuery = ''; 
           
-          window.location.reload(); // ใช้ Hard Reload แก้อาการค้าง
+          window.location.reload(); 
         } catch (error) {
           loader.style.opacity = '0';
           setTimeout(() => loader.classList.add('hidden'), 300);
@@ -800,7 +860,6 @@
         btn.disabled = true;
       }
 
-      // โชว์หน้าต่างโหลดแบบเต็มจอ บังจังหวะที่จอมือถือจะกระตุก
       const loader = document.getElementById('loading-screen');
       const loaderText = document.getElementById('loading-text');
       if (loaderText) loaderText.innerText = 'กำลังบันทึกข้อมูล...';
@@ -836,7 +895,7 @@
           await batch.commit();
           
           sessionStorage.setItem('show_welcome_toast', `บันทึกการส่งให้ ${cust.name} เรียบร้อย!`);
-          window.location.reload(); // ใช้ Hard Reload แก้อาการค้าง
+          window.location.reload(); 
         } catch (error) {
           loader.style.opacity = '0';
           setTimeout(() => loader.classList.add('hidden'), 300);
@@ -978,12 +1037,13 @@
 
     function renderLogin(container) {
       container.innerHTML = `
-        <div class="p-6 max-w-sm mx-auto min-h-screen flex flex-col justify-center pb-20">
+        <div class="p-4 md:p-8 max-w-sm mx-auto min-h-screen flex flex-col justify-center pb-20">
           <div class="text-center mb-8">
             <div class="bg-blue-100 text-blue-600 w-24 h-24 rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-sm"><i data-lucide="droplet" class="w-12 h-12"></i></div>
             <h1 class="text-2xl font-black text-blue-900 leading-tight">ระบบงาน<br/>โรงงานน้ำดื่ม แม่จว้า หมู่ 8</h1>
           </div>
-          <div class="bg-white p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-50">
+          <!-- แก้บัค: ถอด <form> ออก และใช้ onclick ธรรมดา -->
+          <div class="bg-white p-6 md:p-8 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-50">
             <div class="mb-4">
               <label class="block text-gray-700 text-sm font-bold mb-2">เลือกผู้ใช้งาน</label>
               <select id="login-user-select" class="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-base font-bold bg-gray-50 outline-none transition-all">
@@ -994,6 +1054,7 @@
             </div>
             <div class="mb-8">
               <label class="block text-gray-700 text-sm font-bold mb-2">รหัส PIN</label>
+              <!-- ดักการกด Enter ให้เรียกฟังก์ชันเลย -->
               <input type="password" pattern="[0-9]*" inputmode="numeric" id="login-pin" onkeypress="if(event.key === 'Enter') { window.loginUser(); return false; }" class="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-3xl font-black tracking-[0.5em] text-center outline-none bg-gray-50 transition-all" placeholder="****" />
             </div>
             <button type="button" id="btn-login" onclick="window.loginUser()" class="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-600/30 active:scale-95 transition-all text-lg flex justify-center items-center">เข้าสู่ระบบ</button>
@@ -1014,42 +1075,43 @@
       }
 
       container.innerHTML = `
-        <div class="pb-24">
-          <div class="sticky top-0 z-30 bg-white/85 backdrop-blur-xl border-b border-gray-100 px-4 pt-6 pb-4 shadow-sm">
+        <div class="pb-24 md:pb-8">
+          <div class="sticky top-0 z-30 bg-white/85 backdrop-blur-xl border-b border-gray-100 px-4 pt-6 pb-4 shadow-sm md:py-5 md:px-6">
             <div class="flex justify-between items-end mb-4">
               <div>
-                <h1 class="text-xl font-black text-blue-900 tracking-tight">โรงงานน้ำดื่ม แม่จว้า ม.8</h1>
+                <h1 class="text-xl md:text-2xl font-black text-blue-900 tracking-tight">โรงงานน้ำดื่ม แม่จว้า ม.8</h1>
                 <p class="text-[11px] text-gray-500 font-bold mt-1 flex items-center"><i data-lucide="user" class="w-3.5 h-3.5 mr-1"></i> ${window.currentUser.name} | ${new Date().toLocaleDateString('th-TH')}</p>
               </div>
             </div>
 
-            <div class="relative">
+            <div class="relative md:max-w-md">
               <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i data-lucide="search" class="w-4 h-4 text-gray-400"></i></div>
               <input type="text" id="search-list-input" value="${window.searchQuery}" oninput="window.searchQuery=this.value; window.render();" placeholder="ค้นหาชื่อ, โซน หรือเบอร์โทร..." class="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm transition-all" />
               ${window.searchQuery ? `<button onclick="window.vibrate(20); window.searchQuery=''; window.render();" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 active:scale-90 transition-all"><i data-lucide="x-circle" class="w-5 h-5"></i></button>` : ''}
             </div>
           </div>
 
-          <div class="p-4 pt-5">
+          <div class="p-4 md:p-6 pt-5">
             <div class="mb-4 flex justify-between items-center">
               <h2 class="text-gray-800 font-black flex items-center text-lg"><i data-lucide="users" class="w-5 h-5 mr-2 text-blue-500"></i> ลูกค้าทั้งหมด <span class="text-xs text-gray-400 ml-2 font-semibold">(${filtered.length} บ้าน)</span></h2>
-              <button onclick="window.openAddCustomer()" class="bg-blue-50 text-blue-600 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center active:scale-95 transition-all shadow-sm"><i data-lucide="user-plus" class="w-4 h-4 mr-1"></i> เพิ่มลูกค้า</button>
+              <button onclick="window.openAddCustomer()" class="bg-blue-50 text-blue-600 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center active:scale-95 transition-all shadow-sm hover:bg-blue-100"><i data-lucide="user-plus" class="w-4 h-4 mr-1"></i> เพิ่มลูกค้า</button>
             </div>
 
             ${!window.searchQuery && uniqueZones.length > 1 ? `
-            <div id="zone-scroll-container" class="flex overflow-x-auto gap-2 mb-5 pb-1 -mx-4 px-4 no-scrollbar scroll-smooth">
-              ${uniqueZones.map(z => `<button id="${window.selectedZone === z ? 'selected-zone-tab' : ''}" onclick="window.vibrate(20); window.selectedZone='${z}'; window.render();" class="px-4 py-2 rounded-full text-[13px] font-bold whitespace-nowrap transition-all shrink-0 active:scale-95 ${window.selectedZone === z ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-gray-500 border border-gray-200 active:bg-gray-50'}">${z}</button>`).join('')}
+            <div id="zone-scroll-container" class="flex overflow-x-auto gap-2 mb-5 pb-2 -mx-4 px-4 md:mx-0 md:px-0 no-scrollbar scroll-smooth">
+              ${uniqueZones.map(z => `<button id="${window.selectedZone === z ? 'selected-zone-tab' : ''}" onclick="window.vibrate(20); window.selectedZone='${z}'; window.render();" class="px-4 py-2 rounded-full text-[13px] font-bold whitespace-nowrap transition-all shrink-0 active:scale-95 hover:bg-gray-100 ${window.selectedZone === z ? 'bg-blue-600 text-white shadow-md hover:bg-blue-700' : 'bg-white text-gray-500 border border-gray-200'}">${z}</button>`).join('')}
             </div>` : ''}
 
-            <div class="space-y-3">
-              ${filtered.length === 0 ? `<div class="text-center py-12 bg-white rounded-3xl border border-gray-100 shadow-sm"><i data-lucide="users" class="w-12 h-12 mx-auto text-gray-200 mb-3"></i><p class="text-gray-400 font-bold text-sm">ไม่มีรายชื่อลูกค้าในหมวดนี้</p></div>` : filtered.map(cust => `
-                <div onclick="window.goToDelivery('${cust.id}')" class="bg-white p-4 rounded-2xl shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-gray-100 flex justify-between items-center active:scale-95 transition-all cursor-pointer relative overflow-hidden">
+            <!-- 💻 Grid สำหรับ Responsive Desktop -->
+            <div class="space-y-3 md:grid md:grid-cols-2 lg:grid-cols-3 md:space-y-0 md:gap-4">
+              ${filtered.length === 0 ? `<div class="col-span-full text-center py-12 bg-white rounded-3xl border border-gray-100 shadow-sm"><i data-lucide="users" class="w-12 h-12 mx-auto text-gray-200 mb-3"></i><p class="text-gray-400 font-bold text-sm">ไม่มีรายชื่อลูกค้าในหมวดนี้</p></div>` : filtered.map(cust => `
+                <div onclick="window.goToDelivery('${cust.id}')" class="bg-white p-4 rounded-2xl shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-gray-100 flex justify-between items-center active:scale-95 transition-all cursor-pointer relative overflow-hidden hover:shadow-md">
                   ${safeNum(cust.debt) > 0 ? `<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-red-500"></div>` : ''}
                   <div class="pl-2 w-full">
                     <h3 class="font-black text-base text-gray-800 flex items-center">${cust.name}</h3>
                     <div class="flex items-center gap-2 mt-1.5 flex-wrap">
                       ${(window.selectedZone === 'ทั้งหมด' || window.searchQuery) && cust.zone && cust.zone !== 'อื่นๆ' ? `<span class="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded flex items-center font-bold border border-blue-100/50"><i data-lucide="map-pin" class="w-2.5 h-2.5 mr-1"></i> ${cust.zone}</span>` : ''}
-                      ${cust.phone ? `<a href="tel:${cust.phone}" onclick="event.stopPropagation()" class="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded flex items-center font-bold border border-emerald-100 active:scale-90 transition-all"><i data-lucide="phone-call" class="w-2.5 h-2.5 mr-1"></i> โทร</a>` : ''}
+                      ${cust.phone ? `<a href="tel:${cust.phone}" onclick="event.stopPropagation()" class="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded flex items-center font-bold border border-emerald-100 active:scale-90 transition-all hover:bg-emerald-100"><i data-lucide="phone-call" class="w-2.5 h-2.5 mr-1"></i> โทร</a>` : ''}
                     </div>
                     <div class="flex justify-between items-end mt-3">
                       <div class="flex gap-1.5 text-[10px] text-gray-500 font-bold flex-wrap">
@@ -1076,16 +1138,16 @@
       const isEdit = window.currentView === 'editCustomer';
       
       container.innerHTML = `
-        <div class="p-4 pb-24 page-transition">
-          <div class="flex items-center justify-between mb-6 pt-2 sticky top-2 z-20">
+        <div class="p-4 md:p-6 pb-24 md:pb-8 page-transition">
+          <div class="flex items-center justify-between mb-6 pt-2 sticky top-2 z-20 max-w-2xl mx-auto">
             <div class="flex items-center">
-              <button onclick="window.switchView('${isEdit ? 'delivery' : 'list'}')" class="p-2.5 mr-3 bg-white/80 backdrop-blur-md rounded-full shadow-sm text-gray-600 active:scale-90 transition-all border border-gray-100"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+              <button onclick="window.switchView('${isEdit ? 'delivery' : 'list'}')" class="p-2.5 mr-3 bg-white/80 backdrop-blur-md rounded-full shadow-sm text-gray-600 active:scale-90 transition-all border border-gray-100 hover:bg-gray-50"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
               <h2 class="font-black text-xl text-gray-800">${isEdit ? 'แก้ไขข้อมูล' : 'เพิ่มลูกค้าใหม่'}</h2>
             </div>
-            ${isEdit && ['admin', 'super_admin'].includes(window.currentUser.role) ? `<button onclick="window.deleteCustomer()" class="p-2.5 bg-red-50 text-red-600 rounded-full active:scale-90 transition-all shadow-sm border border-red-100"><i data-lucide="trash-2" class="w-5 h-5"></i></button>` : ''}
+            ${isEdit && ['admin', 'super_admin'].includes(window.currentUser.role) ? `<button onclick="window.deleteCustomer()" class="p-2.5 bg-red-50 text-red-600 rounded-full active:scale-90 transition-all shadow-sm border border-red-100 hover:bg-red-100"><i data-lucide="trash-2" class="w-5 h-5"></i></button>` : ''}
           </div>
 
-          <form class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+          <form class="bg-white p-5 md:p-8 rounded-3xl shadow-sm border border-gray-100 max-w-2xl mx-auto">
             <div class="mb-4">
               <label class="block text-gray-700 text-[13px] font-bold mb-2">ชื่อลูกค้า <span class="text-red-500">*</span></label>
               <input type="text" id="form-name" value="${window.formName}" oninput="window.formName=this.value" class="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-base font-bold bg-gray-50 focus:bg-white outline-none transition-all" required placeholder="เช่น ป้าศรี ซอย 1" />
@@ -1102,7 +1164,7 @@
                 <p class="text-[11px] text-gray-400 mb-2 font-bold uppercase tracking-wider">กดเลือกโซนที่เคยมี:</p>
                 <div class="flex flex-wrap gap-2">
                   ${[...new Set(window.customers.map(c => c.zone || 'อื่นๆ'))].filter(z => z !== 'ทั้งหมด' && z !== 'อื่นๆ').map(z => `
-                    <button type="button" onclick="window.vibrate(20); document.getElementById('form-zone').value='${z}'; window.formZone='${z}';" class="px-3.5 py-1.5 rounded-lg text-xs font-bold border bg-gray-50 text-gray-600 border-gray-200 active:scale-95 transition-all">${z}</button>
+                    <button type="button" onclick="window.vibrate(20); document.getElementById('form-zone').value='${z}'; window.formZone='${z}';" class="px-3.5 py-1.5 rounded-lg text-xs font-bold border bg-gray-50 text-gray-600 border-gray-200 active:scale-95 transition-all hover:bg-gray-100">${z}</button>
                   `).join('')}
                 </div>
               </div>
@@ -1139,7 +1201,7 @@
               </div>
             ` : ''}
 
-            <button type="button" id="btn-save-customer" onclick="window.saveCustomer(${isEdit})" class="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-600/30 mt-6 active:scale-95 flex justify-center items-center text-lg transition-all">บันทึกข้อมูล</button>
+            <button type="button" id="btn-save-customer" onclick="window.saveCustomer(${isEdit})" class="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-600/30 mt-6 active:scale-95 flex justify-center items-center text-lg transition-all hover:bg-blue-700">บันทึกข้อมูล</button>
           </form>
         </div>
       `;
@@ -1201,197 +1263,217 @@
       }
 
       container.innerHTML = `
-        <div class="pb-44 relative page-transition">
-          <div class="bg-white/85 backdrop-blur-xl px-4 py-3.5 shadow-sm sticky top-0 z-30 flex items-center justify-between border-b border-gray-100/50">
+        <div class="pb-44 md:pb-10 relative page-transition">
+          <div class="bg-white/85 backdrop-blur-xl px-4 py-3.5 shadow-sm sticky top-0 z-30 flex items-center justify-between border-b border-gray-100/50 md:py-5 md:px-6">
             <div class="flex items-center">
-              <button onclick="window.switchView('list')" class="mr-3 p-2.5 bg-gray-50/80 rounded-full text-gray-700 active:scale-90 transition-all border border-gray-200"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+              <button onclick="window.switchView('list')" class="mr-3 p-2.5 bg-gray-50/80 rounded-full text-gray-700 active:scale-90 transition-all border border-gray-200 hover:bg-gray-100"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
               <div>
-                <h2 class="font-black text-lg text-gray-800 leading-tight">${cust.name}</h2>
+                <h2 class="font-black text-lg md:text-xl text-gray-800 leading-tight">${cust.name}</h2>
                 <div class="flex items-center mt-0.5">
                   ${safeNum(cust.debt) > 0 ? `<span class="text-red-600 text-[10px] font-black bg-red-50 px-2 py-0.5 rounded-md mr-2 border border-red-100">ค้างเก่า: ${safeNum(cust.debt)} ฿</span>` : ''}
                 </div>
               </div>
             </div>
             <div class="flex gap-2">
-              <button onclick="window.openEditCustomer()" class="p-2.5 bg-blue-50 text-blue-600 rounded-full active:scale-90 transition-all"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
-              <button onclick="window.switchView('history')" class="p-2.5 bg-orange-50 text-orange-600 rounded-full active:scale-90 transition-all"><i data-lucide="history" class="w-4 h-4"></i></button>
+              <button onclick="window.openEditCustomer()" class="p-2.5 bg-blue-50 text-blue-600 rounded-full active:scale-90 transition-all hover:bg-blue-100"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
+              <button onclick="window.switchView('history')" class="p-2.5 bg-orange-50 text-orange-600 rounded-full active:scale-90 transition-all hover:bg-orange-100"><i data-lucide="history" class="w-4 h-4"></i></button>
             </div>
           </div>
 
-          <div class="p-4 space-y-4">
+          <!-- 💻 Grid สำหรับ Responsive Desktop: แบ่ง 2 คอลัมน์ -->
+          <div class="p-4 md:p-6 md:grid md:grid-cols-12 md:gap-6 md:items-start">
             
-            <div class="flex items-center justify-between p-3.5 bg-amber-50 border border-amber-200 rounded-2xl shadow-sm">
-              <div class="flex items-center">
-                <div class="bg-amber-100 p-2 rounded-full mr-3 shrink-0"><i data-lucide="map-pin" class="w-4 h-4 text-amber-600"></i></div>
-                <div>
-                  <span class="text-xs font-black text-amber-900">พื้นที่ห่างไกล (+ค่าส่ง)</span>
-                  <p class="text-[10px] text-amber-700 font-bold mt-0.5">+5฿/ถัง, +10฿/ลัง</p>
-                </div>
-              </div>
-              <button type="button" onclick="window.vibrate(20); window.isRemoteArea=!window.isRemoteArea; window.render();" class="px-4 py-2 rounded-xl font-bold text-xs transition-all active:scale-90 shadow-sm ${window.isRemoteArea ? 'bg-amber-500 text-white border-amber-600' : 'bg-white text-gray-500 border border-gray-200'}">
-                ${window.isRemoteArea ? 'เปิดใช้งาน' : 'ปิด'}
-              </button>
-            </div>
-
-            <div class="bg-white rounded-[1.5rem] shadow-sm p-5 border border-blue-50 relative overflow-hidden">
-              <div class="absolute top-0 left-0 w-1.5 h-full bg-blue-500"></div>
-              <div class="flex justify-between items-end mb-3">
-                <h3 class="font-black text-blue-900 flex items-center text-base"><i data-lucide="droplet" class="w-5 h-5 mr-2 text-blue-500"></i> ส่งน้ำใหม่</h3>
-                <span class="text-[9px] bg-blue-50 text-blue-700 px-2 py-1 rounded-md font-bold border border-blue-100">สต๊อกรถ: <span class="text-orange-600">ส้ม ${window.globalStock.orange}</span> | <span class="text-purple-600">ม่วง ${window.globalStock.purple}</span> | <span class="text-amber-700">ลัง ${window.globalStock.crate}</span></span>
-              </div>
-              ${['orange', 'purple', 'crate'].map(item => {
-                const currentPrice = item === 'orange' ? pOrange : (item === 'purple' ? pPurple : pCrate);
-                return `
-                <div class="flex justify-between items-center py-3 border-b border-gray-50 last:border-0">
-                  <div class="flex items-center gap-2">
-                    <span class="font-bold text-gray-700 text-sm">${item==='orange'?`ถังส้ม (${currentPrice}฿)`:item==='purple'?`ถังม่วง (${currentPrice}฿)`:`แบบลัง (${currentPrice}฿)`}</span>
-                  </div>
-                  <div class="flex items-center gap-1 bg-gray-50 p-1 rounded-full border border-gray-100">
-                    <button onclick="window.updateQty('deliveries', '${item}', -1)" class="w-10 h-10 rounded-full bg-white flex items-center justify-center text-gray-600 active:scale-90 transition-transform shadow-sm shrink-0"><i data-lucide="minus" class="w-5 h-5"></i></button>
-                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="del-${item}-input" value="${window.deliveries[item]}" onchange="window.setQty('deliveries', '${item}', this.value)" onfocus="this.select()" class="w-12 text-center font-black text-2xl text-blue-700 bg-transparent border-none p-0 focus:ring-0 outline-none" />
-                    <button onclick="window.updateQty('deliveries', '${item}', 1)" class="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-md active:scale-90 transition-transform ${item==='orange'?'bg-orange-500':item==='purple'?'bg-purple-600':'bg-amber-600'} shrink-0"><i data-lucide="plus" class="w-5 h-5"></i></button>
+            <!-- ⬅️ ซ้าย: รายการน้ำ -->
+            <div class="md:col-span-7 space-y-4">
+              <div class="flex items-center justify-between p-3.5 bg-amber-50 border border-amber-200 rounded-2xl shadow-sm">
+                <div class="flex items-center">
+                  <div class="bg-amber-100 p-2 rounded-full mr-3 shrink-0"><i data-lucide="map-pin" class="w-4 h-4 text-amber-600"></i></div>
+                  <div>
+                    <span class="text-xs font-black text-amber-900">พื้นที่ห่างไกล (+ค่าส่ง)</span>
+                    <p class="text-[10px] text-amber-700 font-bold mt-0.5">+5฿/ถัง, +10฿/ลัง</p>
                   </div>
                 </div>
-              `}).join('')}
-            </div>
-
-            <div class="bg-white rounded-[1.5rem] shadow-sm p-5 border border-indigo-50 relative overflow-hidden">
-              <div class="absolute top-0 left-0 w-1.5 h-full bg-indigo-500"></div>
-              <h3 class="font-black text-indigo-900 mb-3 flex items-center flex-wrap text-base">
-                <i data-lucide="archive" class="w-5 h-5 mr-2 text-indigo-500"></i> ถังส่วนตัว 
-                <span class="text-xs font-black text-red-600 ml-2 bg-red-50 px-2.5 py-1 rounded-lg border border-red-100 shadow-sm">(ค้างร้าน: ${safeNum(cust.stockOwnBottle) + window.ownTakeWash + window.ownTakeRefill + window.ownTakeUnpaid - window.ownDeliverDone - window.ownDeliverPayWash - window.ownDeliverPayRefill})</span>
-              </h3>
-              
-              <div class="flex gap-2 mb-4 bg-indigo-50 p-1.5 rounded-xl border border-indigo-100/50">
-                <button onclick="window.vibrate(20); window.ownBottlePayMode='pay_now'; window.render();" class="flex-1 py-2 text-[11px] font-black rounded-lg transition-all active:scale-95 ${window.ownBottlePayMode === 'pay_now' ? 'bg-white text-indigo-700 shadow-sm' : 'text-indigo-400 active:bg-indigo-100/50'}">โหมดรับถัง (จ่ายเลย)</button>
-                <button onclick="window.vibrate(20); window.ownBottlePayMode='pay_later'; window.render();" class="flex-1 py-2 text-[11px] font-black rounded-lg transition-all active:scale-95 ${window.ownBottlePayMode === 'pay_later' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-indigo-600'}">โหมดส่งคืน (ค่อยจ่าย)</button>
+                <button type="button" onclick="window.vibrate(20); window.isRemoteArea=!window.isRemoteArea; window.render();" class="px-4 py-2 rounded-xl font-bold text-xs transition-all active:scale-90 shadow-sm hover:opacity-80 ${window.isRemoteArea ? 'bg-amber-500 text-white border-amber-600' : 'bg-white text-gray-500 border border-gray-200'}">
+                  ${window.isRemoteArea ? 'เปิดใช้งาน' : 'ปิด'}
+                </button>
               </div>
 
-              ${window.ownBottlePayMode === 'pay_now' ? `
-                <div class="flex justify-between items-center py-2.5 border-b border-gray-50">
-                  <span class="font-bold text-gray-700 text-[13px] leading-tight w-1/2">รับถังมาล้าง+เติม<br><span class="text-indigo-500 text-[11px] font-semibold">(เก็บเงินเลย 15฿)</span></span>
-                  <div class="flex items-center gap-1 bg-gray-50 p-1 rounded-full border border-gray-100">
-                    <button onclick="window.updateOwnQty('ownTakeRefill', -1)" class="w-9 h-9 rounded-full bg-white flex items-center justify-center text-gray-600 active:scale-90 transition-transform shadow-sm shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
-                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="own-take-refill-input" value="${window.ownTakeRefill}" onchange="window.setOwnQty('ownTakeRefill', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-indigo-700 bg-transparent border-none p-0 focus:ring-0 outline-none" />
-                    <button onclick="window.updateOwnQty('ownTakeRefill', 1)" class="w-9 h-9 rounded-full bg-indigo-500 text-white shadow-md active:scale-90 transition-transform flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
-                  </div>
+              <div class="bg-white rounded-[1.5rem] shadow-sm p-5 border border-blue-50 relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-1.5 h-full bg-blue-500"></div>
+                <div class="flex justify-between items-end mb-3">
+                  <h3 class="font-black text-blue-900 flex items-center text-base"><i data-lucide="droplet" class="w-5 h-5 mr-2 text-blue-500"></i> ส่งน้ำใหม่</h3>
+                  <span class="text-[9px] bg-blue-50 text-blue-700 px-2 py-1 rounded-md font-bold border border-blue-100 hidden md:block">สต๊อก: <span class="text-orange-600">ส้ม ${window.globalStock.orange}</span> | <span class="text-purple-600">ม่วง ${window.globalStock.purple}</span> | <span class="text-amber-700">ลัง ${window.globalStock.crate}</span></span>
                 </div>
-                <div class="flex justify-between items-center py-2.5 border-b border-gray-50">
-                  <span class="font-bold text-gray-700 text-[13px] leading-tight w-1/2">รับถังมาล้างอย่างเดียว<br><span class="text-indigo-500 text-[11px] font-semibold">(เก็บเงินเลย 5฿)</span></span>
-                  <div class="flex items-center gap-1 bg-gray-50 p-1 rounded-full border border-gray-100">
-                    <button onclick="window.updateOwnQty('ownTakeWash', -1)" class="w-9 h-9 rounded-full bg-white flex items-center justify-center text-gray-600 active:scale-90 transition-transform shadow-sm shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
-                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="own-take-wash-input" value="${window.ownTakeWash}" onchange="window.setOwnQty('ownTakeWash', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-indigo-700 bg-transparent border-none p-0 focus:ring-0 outline-none" />
-                    <button onclick="window.updateOwnQty('ownTakeWash', 1)" class="w-9 h-9 rounded-full bg-indigo-400 text-white shadow-md active:scale-90 transition-transform flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
-                  </div>
-                </div>
-                <div class="flex justify-between items-center py-2.5 bg-gray-50 -mx-5 px-5 pb-4 mt-3 rounded-b-[1.5rem] border-t border-gray-100">
-                  <span class="font-bold text-gray-600 text-[13px]"><i data-lucide="corner-up-left" class="w-3.5 h-3.5 inline mr-1 text-gray-400"></i>ส่งคืนลูกค้า (ทำเสร็จแล้ว)</span>
-                  <div class="flex items-center gap-1 bg-white p-1 rounded-full border border-gray-200">
-                    <button onclick="window.updateOwnQty('ownDeliverDone', -1)" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 active:scale-90 transition-transform shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
-                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="own-deliver-done-input" value="${window.ownDeliverDone}" onchange="window.setOwnQty('ownDeliverDone', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-700 bg-transparent border-none p-0 focus:ring-0 outline-none" />
-                    <button onclick="window.updateOwnQty('ownDeliverDone', 1)" class="w-8 h-8 rounded-full bg-gray-500 text-white shadow-sm active:scale-90 transition-transform flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
-                  </div>
-                </div>
-              ` : `
-                <div class="flex justify-between items-center py-2.5 border-b border-gray-50">
-                  <span class="font-bold text-gray-700 text-[13px] leading-tight w-1/2">รับถังมาทำ<br><span class="text-indigo-500 text-[11px] font-semibold">(รอเก็บเงินตอนส่งคืน)</span></span>
-                  <div class="flex items-center gap-1 bg-gray-50 p-1 rounded-full border border-gray-100">
-                    <button onclick="window.updateOwnQty('ownTakeUnpaid', -1)" class="w-9 h-9 rounded-full bg-white flex items-center justify-center text-gray-600 active:scale-90 transition-transform shadow-sm shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
-                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="own-take-unpaid-input" value="${window.ownTakeUnpaid}" onchange="window.setOwnQty('ownTakeUnpaid', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-indigo-700 bg-transparent border-none p-0 focus:ring-0 outline-none" />
-                    <button onclick="window.updateOwnQty('ownTakeUnpaid', 1)" class="w-9 h-9 rounded-full bg-indigo-300 text-white shadow-md active:scale-90 transition-transform flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
-                  </div>
-                </div>
-                <div class="flex justify-between items-center py-2.5 bg-gray-50 -mx-5 px-5 pb-1 mt-3 border-t border-gray-100">
-                  <span class="font-bold text-gray-600 text-[13px] leading-tight w-1/2"><i data-lucide="corner-up-left" class="w-3.5 h-3.5 inline mr-1 text-gray-400"></i>ส่งคืนลูกค้า<br><span class="text-indigo-500 text-[11px] font-semibold ml-5">(เก็บค่าล้าง+เติม 15฿)</span></span>
-                  <div class="flex items-center gap-1 bg-white p-1 rounded-full border border-gray-200">
-                    <button onclick="window.updateOwnQty('ownDeliverPayRefill', -1)" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 active:scale-90 transition-transform shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
-                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="own-deliver-pay-refill-input" value="${window.ownDeliverPayRefill}" onchange="window.setOwnQty('ownDeliverPayRefill', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-indigo-700 bg-transparent border-none p-0 focus:ring-0 outline-none" />
-                    <button onclick="window.updateOwnQty('ownDeliverPayRefill', 1)" class="w-8 h-8 rounded-full bg-indigo-500 text-white shadow-sm active:scale-90 transition-transform flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
-                  </div>
-                </div>
-                <div class="flex justify-between items-center py-2.5 bg-gray-50 -mx-5 px-5 pb-4 rounded-b-[1.5rem] border-b border-gray-100">
-                  <span class="font-bold text-gray-600 text-[13px] leading-tight w-1/2"><i data-lucide="corner-up-left" class="w-3.5 h-3.5 inline mr-1 text-gray-400 opacity-0"></i>ส่งคืนลูกค้า<br><span class="text-indigo-500 text-[11px] font-semibold ml-5">(เก็บค่าล้าง 5฿)</span></span>
-                  <div class="flex items-center gap-1 bg-white p-1 rounded-full border border-gray-200">
-                    <button onclick="window.updateOwnQty('ownDeliverPayWash', -1)" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 active:scale-90 transition-transform shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
-                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="own-deliver-pay-wash-input" value="${window.ownDeliverPayWash}" onchange="window.setOwnQty('ownDeliverPayWash', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-indigo-700 bg-transparent border-none p-0 focus:ring-0 outline-none" />
-                    <button onclick="window.updateOwnQty('ownDeliverPayWash', 1)" class="w-8 h-8 rounded-full bg-indigo-400 text-white shadow-sm active:scale-90 transition-transform flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
-                  </div>
-                </div>
-              `}
-            </div>
-
-            <div class="bg-white rounded-[1.5rem] shadow-sm p-5 border border-gray-100 relative overflow-hidden">
-              <div class="absolute top-0 left-0 w-1.5 h-full bg-gray-300"></div>
-              <h3 class="font-black text-gray-700 mb-3 flex items-center text-base"><i data-lucide="check-circle" class="w-5 h-5 mr-2 text-gray-400"></i> รับคืนเปล่าโรงงาน</h3>
-              ${['orange', 'purple', 'crate'].map(item => {
-                const stockKey = item === 'orange' ? 'stockOrange' : item === 'purple' ? 'stockPurple' : 'stockCrate';
-                const remainingStock = safeNum(cust[stockKey]) - window.returns[item];
-                return `
-                  <div class="flex justify-between items-center py-2.5 border-b border-gray-50 last:border-0">
-                    <div class="flex flex-col">
-                      <span class="font-bold text-gray-700 text-sm">${item==='orange'?'ถังส้ม (คืน)':item==='purple'?'ถังม่วง (คืน)':'แบบลัง (คืน)'}</span>
-                      <span class="text-[11px] text-gray-400 mt-0.5 font-bold">ค้างบ้าน: <span class="font-black ${remainingStock < 0 ? 'text-red-500' : remainingStock === 0 ? 'text-emerald-500' : 'text-blue-600'}">${remainingStock < 0 ? 0 : remainingStock}</span></span>
+                ${['orange', 'purple', 'crate'].map(item => {
+                  const currentPrice = item === 'orange' ? pOrange : (item === 'purple' ? pPurple : pCrate);
+                  return `
+                  <div class="flex justify-between items-center py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors -mx-5 px-5">
+                    <div class="flex items-center gap-2">
+                      <span class="font-bold text-gray-700 text-sm">${item==='orange'?`ถังส้ม (${currentPrice}฿)`:item==='purple'?`ถังม่วง (${currentPrice}฿)`:`แบบลัง (${currentPrice}฿)`}</span>
                     </div>
-                    <div class="flex items-center gap-1 bg-gray-50 p-1 rounded-full border border-gray-100">
-                      <button onclick="window.updateQty('returns', '${item}', -1)" class="w-10 h-10 rounded-full bg-white flex items-center justify-center text-gray-600 active:scale-90 transition-transform shadow-sm shrink-0"><i data-lucide="minus" class="w-5 h-5"></i></button>
-                      <input type="text" inputmode="numeric" pattern="[0-9]*" id="ret-${item}-input" value="${window.returns[item]}" onchange="window.setQty('returns', '${item}', this.value)" onfocus="this.select()" class="w-12 text-center font-black text-2xl text-gray-700 bg-transparent border-none p-0 focus:ring-0 outline-none" />
-                      <button onclick="window.updateQty('returns', '${item}', 1)" class="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-md active:scale-90 transition-transform ${item==='orange'?'bg-orange-400':item==='purple'?'bg-purple-400':'bg-amber-500'} shrink-0"><i data-lucide="plus" class="w-5 h-5"></i></button>
+                    <div class="flex items-center gap-1 bg-gray-100/50 p-1 rounded-full border border-gray-100">
+                      <button onclick="window.updateQty('deliveries', '${item}', -1)" class="w-10 h-10 rounded-full bg-white flex items-center justify-center text-gray-600 active:scale-90 transition-transform shadow-sm shrink-0 hover:bg-gray-50"><i data-lucide="minus" class="w-5 h-5"></i></button>
+                      <input type="text" inputmode="numeric" pattern="[0-9]*" id="del-${item}-input" value="${window.deliveries[item]}" onchange="window.setQty('deliveries', '${item}', this.value)" onfocus="this.select()" class="w-12 text-center font-black text-2xl text-blue-700 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                      <button onclick="window.updateQty('deliveries', '${item}', 1)" class="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-md active:scale-90 transition-transform hover:opacity-90 ${item==='orange'?'bg-orange-500':item==='purple'?'bg-purple-600':'bg-amber-600'} shrink-0"><i data-lucide="plus" class="w-5 h-5"></i></button>
                     </div>
                   </div>
-                `;
-              }).join('')}
-            </div>
-
-            <div class="bg-white rounded-2xl shadow-[0_2px_10px_rgb(0,0,0,0.02)] p-4 border border-gray-100">
-              <label class="block text-xs font-bold text-gray-500 mb-2 flex items-center uppercase tracking-wider"><i data-lucide="message-square" class="w-4 h-4 mr-1.5 text-gray-400"></i> หมายเหตุบิล</label>
-              <input type="text" id="tx-note-input" value="${window.txNote}" oninput="window.txNote=this.value" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-sm font-medium outline-none transition-all bg-gray-50 focus:bg-white" placeholder="เช่น โอนเงิน, ฝากไว้หน้าบ้าน..." />
-            </div>
-
-            <div class="bg-white rounded-3xl shadow-sm p-5 border border-gray-100">
-              <h3 class="font-black text-gray-800 mb-4 flex items-center text-base"><i data-lucide="credit-card" class="w-5 h-5 mr-2 text-blue-500"></i> สถานะเก็บเงิน</h3>
-              <div class="flex gap-2">
-                <button onclick="window.vibrate(20); window.paymentStatus='paid'; window.render();" class="flex-1 py-3.5 rounded-xl font-bold flex flex-col items-center border-2 transition-all active:scale-95 ${window.paymentStatus === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-500 shadow-sm' : 'bg-white text-gray-400 border-gray-100'}"><i data-lucide="check-circle" class="w-5 h-5 mb-1.5"></i> จ่ายแล้ว</button>
-                <button onclick="window.vibrate(20); window.paymentStatus='unpaid'; window.render();" class="flex-1 py-3.5 rounded-xl font-bold flex flex-col items-center border-2 transition-all active:scale-95 ${window.paymentStatus === 'unpaid' ? 'bg-orange-50 text-orange-600 border-orange-500 shadow-sm' : 'bg-white text-gray-400 border-gray-100'}"><i data-lucide="alert-circle" class="w-5 h-5 mb-1.5"></i> ค้างยอด</button>
-                <button onclick="window.vibrate(20); window.paymentStatus='support'; window.render();" class="flex-1 py-3.5 rounded-xl font-bold flex flex-col items-center border-2 transition-all active:scale-95 ${window.paymentStatus === 'support' ? 'bg-pink-50 text-pink-600 border-pink-500 shadow-sm' : 'bg-white text-gray-400 border-gray-100'}"><i data-lucide="gift" class="w-5 h-5 mb-1.5"></i> สนับสนุน</button>
+                `}).join('')}
               </div>
 
-              ${window.paymentStatus === 'paid' && totalToCollect > 0 ? `
-                <div class="mt-5 pt-5 border-t border-gray-100">
-                  <div class="flex gap-2 mb-4 bg-gray-50 p-1.5 rounded-xl border border-gray-100">
-                    <button onclick="window.vibrate(20); window.paymentMethod='cash'; window.render();" class="flex-1 py-2 text-xs font-black rounded-lg transition-all flex justify-center items-center active:scale-95 ${window.paymentMethod === 'cash' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-400 active:bg-gray-200'}"><i data-lucide="banknote" class="w-4 h-4 mr-1"></i> เงินสด</button>
-                    <button onclick="window.vibrate(20); window.paymentMethod='qr'; window.render();" class="flex-1 py-2 text-xs font-black rounded-lg transition-all flex justify-center items-center active:scale-95 ${window.paymentMethod === 'qr' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-400 active:bg-gray-200'}"><i data-lucide="qr-code" class="w-4 h-4 mr-1"></i> โอนผ่าน QR</button>
-                  </div>
+              <div class="bg-white rounded-[1.5rem] shadow-sm p-5 border border-indigo-50 relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-1.5 h-full bg-indigo-500"></div>
+                <h3 class="font-black text-indigo-900 mb-3 flex items-center flex-wrap text-base">
+                  <i data-lucide="archive" class="w-5 h-5 mr-2 text-indigo-500"></i> ถังส่วนตัว 
+                  <span class="text-xs font-black text-red-600 ml-2 bg-red-50 px-2.5 py-1 rounded-lg border border-red-100 shadow-sm">(ค้างร้าน: ${safeNum(cust.stockOwnBottle) + window.ownTakeWash + window.ownTakeRefill + window.ownTakeUnpaid - window.ownDeliverDone - window.ownDeliverPayWash - window.ownDeliverPayRefill})</span>
+                </h3>
+                
+                <div class="flex gap-2 mb-4 bg-indigo-50 p-1.5 rounded-xl border border-indigo-100/50">
+                  <button onclick="window.vibrate(20); window.ownBottlePayMode='pay_now'; window.render();" class="flex-1 py-2 text-[11px] font-black rounded-lg transition-all active:scale-95 ${window.ownBottlePayMode === 'pay_now' ? 'bg-white text-indigo-700 shadow-sm' : 'text-indigo-400 hover:bg-indigo-100/50'}">โหมดรับถัง (จ่ายเลย)</button>
+                  <button onclick="window.vibrate(20); window.ownBottlePayMode='pay_later'; window.render();" class="flex-1 py-2 text-[11px] font-black rounded-lg transition-all active:scale-95 ${window.ownBottlePayMode === 'pay_later' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:bg-indigo-100/50'}">โหมดส่งคืน (ค่อยจ่าย)</button>
+                </div>
 
-                  ${window.paymentMethod === 'cash' ? `
-                    <div class="flex justify-between items-center mb-3">
-                      <span class="text-[13px] font-bold text-gray-800 flex items-center"><i data-lucide="calculator" class="w-4 h-4 mr-1.5 text-blue-500"></i> ทอนเงินลูกค้า</span>
-                      <span class="text-[10px] text-gray-500 font-bold bg-gray-100 px-2 py-1 rounded-md border border-gray-200">ยอดต้องจ่าย ${totalToCollect} ฿</span>
+                ${window.ownBottlePayMode === 'pay_now' ? `
+                  <div class="flex justify-between items-center py-2.5 border-b border-gray-50 hover:bg-gray-50 transition-colors -mx-5 px-5">
+                    <span class="font-bold text-gray-700 text-[13px] leading-tight w-1/2">รับถังมาล้าง+เติม<br><span class="text-indigo-500 text-[11px] font-semibold">(เก็บเงินเลย 15฿)</span></span>
+                    <div class="flex items-center gap-1 bg-gray-100/50 p-1 rounded-full border border-gray-100">
+                      <button onclick="window.updateOwnQty('ownTakeRefill', -1)" class="w-9 h-9 rounded-full bg-white flex items-center justify-center text-gray-600 active:scale-90 transition-transform shadow-sm shrink-0 hover:bg-gray-50"><i data-lucide="minus" class="w-4 h-4"></i></button>
+                      <input type="text" inputmode="numeric" pattern="[0-9]*" id="own-take-refill-input" value="${window.ownTakeRefill}" onchange="window.setOwnQty('ownTakeRefill', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-indigo-700 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                      <button onclick="window.updateOwnQty('ownTakeRefill', 1)" class="w-9 h-9 rounded-full bg-indigo-500 text-white shadow-md active:scale-90 transition-transform hover:opacity-90 flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
                     </div>
-                    <div class="mb-3">
-                      <input type="text" inputmode="numeric" pattern="[0-9]*" id="cash-received-input" placeholder="พิมพ์จำนวนเงินที่รับมา..." value="${window.cashReceived}" oninput="window.cashReceived=this.value ? safeNum(this.value) : ''; window.render();" class="w-full px-4 py-3.5 text-xl font-black rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 outline-none bg-gray-50 focus:bg-white text-center mb-2 transition-all shadow-inner" />
-                      <div class="grid grid-cols-4 gap-2">
-                        <button type="button" onclick="window.vibrate(15); window.cashReceived=${totalToCollect}; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-emerald-50 active:text-emerald-700 active:border-emerald-200 active:scale-95 transition-all shadow-sm">พอดี</button>
-                        <button type="button" onclick="window.vibrate(15); window.cashReceived=100; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-emerald-50 active:text-emerald-700 active:border-emerald-200 active:scale-95 transition-all shadow-sm">100</button>
-                        <button type="button" onclick="window.vibrate(15); window.cashReceived=500; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-emerald-50 active:text-emerald-700 active:border-emerald-200 active:scale-95 transition-all shadow-sm">500</button>
-                        <button type="button" onclick="window.vibrate(15); window.cashReceived=1000; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-emerald-50 active:text-emerald-700 active:border-emerald-200 active:scale-95 transition-all shadow-sm">1,000</button>
+                  </div>
+                  <div class="flex justify-between items-center py-2.5 border-b border-gray-50 hover:bg-gray-50 transition-colors -mx-5 px-5">
+                    <span class="font-bold text-gray-700 text-[13px] leading-tight w-1/2">รับถังมาล้างอย่างเดียว<br><span class="text-indigo-500 text-[11px] font-semibold">(เก็บเงินเลย 5฿)</span></span>
+                    <div class="flex items-center gap-1 bg-gray-100/50 p-1 rounded-full border border-gray-100">
+                      <button onclick="window.updateOwnQty('ownTakeWash', -1)" class="w-9 h-9 rounded-full bg-white flex items-center justify-center text-gray-600 active:scale-90 transition-transform shadow-sm shrink-0 hover:bg-gray-50"><i data-lucide="minus" class="w-4 h-4"></i></button>
+                      <input type="text" inputmode="numeric" pattern="[0-9]*" id="own-take-wash-input" value="${window.ownTakeWash}" onchange="window.setOwnQty('ownTakeWash', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-indigo-700 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                      <button onclick="window.updateOwnQty('ownTakeWash', 1)" class="w-9 h-9 rounded-full bg-indigo-400 text-white shadow-md active:scale-90 transition-transform hover:opacity-90 flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                    </div>
+                  </div>
+                  <div class="flex justify-between items-center py-3.5 bg-gray-50 -mx-5 px-5 mt-3 rounded-b-[1.5rem] border-t border-gray-100">
+                    <span class="font-bold text-gray-600 text-[13px]"><i data-lucide="corner-up-left" class="w-3.5 h-3.5 inline mr-1 text-gray-400"></i>ส่งคืนลูกค้า (ทำเสร็จแล้ว)</span>
+                    <div class="flex items-center gap-1 bg-white p-1 rounded-full border border-gray-200">
+                      <button onclick="window.updateOwnQty('ownDeliverDone', -1)" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 active:scale-90 transition-transform shrink-0 hover:bg-gray-200"><i data-lucide="minus" class="w-4 h-4"></i></button>
+                      <input type="text" inputmode="numeric" pattern="[0-9]*" id="own-deliver-done-input" value="${window.ownDeliverDone}" onchange="window.setOwnQty('ownDeliverDone', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-700 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                      <button onclick="window.updateOwnQty('ownDeliverDone', 1)" class="w-8 h-8 rounded-full bg-gray-500 text-white shadow-sm active:scale-90 transition-transform hover:bg-gray-600 flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                    </div>
+                  </div>
+                ` : `
+                  <div class="flex justify-between items-center py-2.5 border-b border-gray-50 hover:bg-gray-50 transition-colors -mx-5 px-5">
+                    <span class="font-bold text-gray-700 text-[13px] leading-tight w-1/2">รับถังมาทำ<br><span class="text-indigo-500 text-[11px] font-semibold">(รอเก็บเงินตอนส่งคืน)</span></span>
+                    <div class="flex items-center gap-1 bg-gray-100/50 p-1 rounded-full border border-gray-100">
+                      <button onclick="window.updateOwnQty('ownTakeUnpaid', -1)" class="w-9 h-9 rounded-full bg-white flex items-center justify-center text-gray-600 active:scale-90 transition-transform shadow-sm shrink-0 hover:bg-gray-50"><i data-lucide="minus" class="w-4 h-4"></i></button>
+                      <input type="text" inputmode="numeric" pattern="[0-9]*" id="own-take-unpaid-input" value="${window.ownTakeUnpaid}" onchange="window.setOwnQty('ownTakeUnpaid', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-indigo-700 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                      <button onclick="window.updateOwnQty('ownTakeUnpaid', 1)" class="w-9 h-9 rounded-full bg-indigo-300 text-white shadow-md active:scale-90 transition-transform hover:opacity-90 flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                    </div>
+                  </div>
+                  <div class="flex justify-between items-center py-3 bg-gray-50 -mx-5 px-5 mt-3 border-t border-gray-100 border-b border-white">
+                    <span class="font-bold text-gray-600 text-[13px] leading-tight w-1/2"><i data-lucide="corner-up-left" class="w-3.5 h-3.5 inline mr-1 text-gray-400"></i>ส่งคืนลูกค้า<br><span class="text-indigo-500 text-[11px] font-semibold ml-5">(เก็บค่าล้าง+เติม 15฿)</span></span>
+                    <div class="flex items-center gap-1 bg-white p-1 rounded-full border border-gray-200">
+                      <button onclick="window.updateOwnQty('ownDeliverPayRefill', -1)" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 active:scale-90 transition-transform shrink-0 hover:bg-gray-200"><i data-lucide="minus" class="w-4 h-4"></i></button>
+                      <input type="text" inputmode="numeric" pattern="[0-9]*" id="own-deliver-pay-refill-input" value="${window.ownDeliverPayRefill}" onchange="window.setOwnQty('ownDeliverPayRefill', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-indigo-700 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                      <button onclick="window.updateOwnQty('ownDeliverPayRefill', 1)" class="w-8 h-8 rounded-full bg-indigo-500 text-white shadow-sm active:scale-90 transition-transform hover:bg-indigo-600 flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                    </div>
+                  </div>
+                  <div class="flex justify-between items-center py-3 bg-gray-50 -mx-5 px-5 rounded-b-[1.5rem] border-b border-gray-100">
+                    <span class="font-bold text-gray-600 text-[13px] leading-tight w-1/2"><i data-lucide="corner-up-left" class="w-3.5 h-3.5 inline mr-1 text-gray-400 opacity-0"></i>ส่งคืนลูกค้า<br><span class="text-indigo-500 text-[11px] font-semibold ml-5">(เก็บค่าล้าง 5฿)</span></span>
+                    <div class="flex items-center gap-1 bg-white p-1 rounded-full border border-gray-200">
+                      <button onclick="window.updateOwnQty('ownDeliverPayWash', -1)" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 active:scale-90 transition-transform shrink-0 hover:bg-gray-200"><i data-lucide="minus" class="w-4 h-4"></i></button>
+                      <input type="text" inputmode="numeric" pattern="[0-9]*" id="own-deliver-pay-wash-input" value="${window.ownDeliverPayWash}" onchange="window.setOwnQty('ownDeliverPayWash', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-indigo-700 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                      <button onclick="window.updateOwnQty('ownDeliverPayWash', 1)" class="w-8 h-8 rounded-full bg-indigo-400 text-white shadow-sm active:scale-90 transition-transform hover:bg-indigo-500 flex items-center justify-center shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                    </div>
+                  </div>
+                `}
+              </div>
+
+              <div class="bg-white rounded-[1.5rem] shadow-sm p-5 border border-gray-100 relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-1.5 h-full bg-gray-300"></div>
+                <h3 class="font-black text-gray-700 mb-3 flex items-center text-base"><i data-lucide="check-circle" class="w-5 h-5 mr-2 text-gray-400"></i> รับคืนเปล่าโรงงาน</h3>
+                ${['orange', 'purple', 'crate'].map(item => {
+                  const stockKey = item === 'orange' ? 'stockOrange' : item === 'purple' ? 'stockPurple' : 'stockCrate';
+                  const remainingStock = safeNum(cust[stockKey]) - window.returns[item];
+                  return `
+                    <div class="flex justify-between items-center py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors -mx-5 px-5">
+                      <div class="flex flex-col">
+                        <span class="font-bold text-gray-700 text-sm">${item==='orange'?'ถังส้ม (คืน)':item==='purple'?'ถังม่วง (คืน)':'แบบลัง (คืน)'}</span>
+                        <span class="text-[11px] text-gray-400 mt-0.5 font-bold">ค้างบ้าน: <span class="font-black ${remainingStock < 0 ? 'text-red-500' : remainingStock === 0 ? 'text-emerald-500' : 'text-blue-600'}">${remainingStock < 0 ? 0 : remainingStock}</span></span>
+                      </div>
+                      <div class="flex items-center gap-1 bg-gray-100/50 p-1 rounded-full border border-gray-100">
+                        <button onclick="window.updateQty('returns', '${item}', -1)" class="w-10 h-10 rounded-full bg-white flex items-center justify-center text-gray-600 active:scale-90 transition-transform shadow-sm shrink-0 hover:bg-gray-50"><i data-lucide="minus" class="w-5 h-5"></i></button>
+                        <input type="text" inputmode="numeric" pattern="[0-9]*" id="ret-${item}-input" value="${window.returns[item]}" onchange="window.setQty('returns', '${item}', this.value)" onfocus="this.select()" class="w-12 text-center font-black text-2xl text-gray-700 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                        <button onclick="window.updateQty('returns', '${item}', 1)" class="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-md active:scale-90 transition-transform hover:opacity-90 ${item==='orange'?'bg-orange-400':item==='purple'?'bg-purple-400':'bg-amber-500'} shrink-0"><i data-lucide="plus" class="w-5 h-5"></i></button>
                       </div>
                     </div>
-                    ${window.cashReceived !== '' ? `
-                      <div class="p-4 rounded-[1rem] text-center font-bold text-base shadow-inner ${changeAmount >= 0 ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'} animate-fade-in">
-                        ${changeAmount >= 0 ? `💵 ทอนเงินลูกค้า: <span class="text-3xl font-black text-emerald-600 ml-2 block mt-1">${changeAmount.toLocaleString()} ฿</span>` : `⚠️ เงินไม่พอ: ขาดอีก <span class="text-xl font-black text-red-600 ml-1">${Math.abs(changeAmount).toLocaleString()} ฿</span>`}
-                      </div>
-                    ` : ''}
-                  ` : `
-                    <div class="flex flex-col items-center justify-center p-2 w-full animate-fade-in">
-                      ${qrHtml}
-                    </div>
-                  `}
+                  `;
+                }).join('')}
+              </div>
+            </div>
+
+            <!-- ➡️ ขวา: สรุปและการจ่ายเงิน (จะอยู่ด้านข้างใน Desktop) -->
+            <div class="md:col-span-5 space-y-4 md:sticky md:top-24 mt-4 md:mt-0">
+              <div class="bg-white rounded-2xl shadow-[0_2px_10px_rgb(0,0,0,0.02)] p-4 border border-gray-100">
+                <label class="block text-xs font-bold text-gray-500 mb-2 flex items-center uppercase tracking-wider"><i data-lucide="message-square" class="w-4 h-4 mr-1.5 text-gray-400"></i> หมายเหตุบิล</label>
+                <input type="text" id="tx-note-input" value="${window.txNote}" oninput="window.txNote=this.value" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-sm font-medium outline-none transition-all bg-gray-50 focus:bg-white" placeholder="เช่น โอนเงิน, ฝากไว้หน้าบ้าน..." />
+              </div>
+
+              <div class="bg-white rounded-3xl shadow-sm p-5 border border-gray-100">
+                <h3 class="font-black text-gray-800 mb-4 flex items-center text-base"><i data-lucide="credit-card" class="w-5 h-5 mr-2 text-blue-500"></i> สถานะเก็บเงิน</h3>
+                <div class="flex gap-2">
+                  <button onclick="window.vibrate(20); window.paymentStatus='paid'; window.render();" class="flex-1 py-3.5 rounded-xl font-bold flex flex-col items-center border-2 transition-all active:scale-95 ${window.paymentStatus === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-500 shadow-sm' : 'bg-white text-gray-400 border-gray-100 hover:bg-gray-50'}"><i data-lucide="check-circle" class="w-5 h-5 mb-1.5"></i> จ่ายแล้ว</button>
+                  <button onclick="window.vibrate(20); window.paymentStatus='unpaid'; window.render();" class="flex-1 py-3.5 rounded-xl font-bold flex flex-col items-center border-2 transition-all active:scale-95 ${window.paymentStatus === 'unpaid' ? 'bg-orange-50 text-orange-600 border-orange-500 shadow-sm' : 'bg-white text-gray-400 border-gray-100 hover:bg-gray-50'}"><i data-lucide="alert-circle" class="w-5 h-5 mb-1.5"></i> ค้างยอด</button>
+                  <button onclick="window.vibrate(20); window.paymentStatus='support'; window.render();" class="flex-1 py-3.5 rounded-xl font-bold flex flex-col items-center border-2 transition-all active:scale-95 ${window.paymentStatus === 'support' ? 'bg-pink-50 text-pink-600 border-pink-500 shadow-sm' : 'bg-white text-gray-400 border-gray-100 hover:bg-gray-50'}"><i data-lucide="gift" class="w-5 h-5 mb-1.5"></i> สนับสนุน</button>
                 </div>
-              ` : ''}
+
+                ${window.paymentStatus === 'paid' && totalToCollect > 0 ? `
+                  <div class="mt-5 pt-5 border-t border-gray-100 animate-fade-in">
+                    <div class="flex gap-2 mb-4 bg-gray-50 p-1.5 rounded-xl border border-gray-100">
+                      <button onclick="window.vibrate(20); window.paymentMethod='cash'; window.render();" class="flex-1 py-2 text-xs font-black rounded-lg transition-all flex justify-center items-center active:scale-95 ${window.paymentMethod === 'cash' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-400 hover:bg-gray-200'}"><i data-lucide="banknote" class="w-4 h-4 mr-1"></i> เงินสด</button>
+                      <button onclick="window.vibrate(20); window.paymentMethod='qr'; window.render();" class="flex-1 py-2 text-xs font-black rounded-lg transition-all flex justify-center items-center active:scale-95 ${window.paymentMethod === 'qr' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-400 hover:bg-gray-200'}"><i data-lucide="qr-code" class="w-4 h-4 mr-1"></i> โอนผ่าน QR</button>
+                    </div>
+
+                    ${window.paymentMethod === 'cash' ? `
+                      <div class="flex justify-between items-center mb-3">
+                        <span class="text-[13px] font-bold text-gray-800 flex items-center"><i data-lucide="calculator" class="w-4 h-4 mr-1.5 text-blue-500"></i> ทอนเงินลูกค้า</span>
+                        <span class="text-[10px] text-gray-500 font-bold bg-gray-100 px-2 py-1 rounded-md border border-gray-200">ยอดต้องจ่าย ${totalToCollect} ฿</span>
+                      </div>
+                      <div class="mb-3">
+                        <input type="text" inputmode="numeric" pattern="[0-9]*" id="cash-received-input" placeholder="พิมพ์จำนวนเงินที่รับมา..." value="${window.cashReceived}" oninput="window.cashReceived=this.value ? safeNum(this.value) : ''; window.render();" class="w-full px-4 py-3.5 text-xl font-black rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 outline-none bg-gray-50 focus:bg-white text-center mb-2 transition-all shadow-inner" />
+                        <div class="grid grid-cols-4 gap-2">
+                          <button type="button" onclick="window.vibrate(15); window.cashReceived=${totalToCollect}; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-emerald-50 active:text-emerald-700 active:border-emerald-200 active:scale-95 transition-all shadow-sm hover:bg-gray-50">พอดี</button>
+                          <button type="button" onclick="window.vibrate(15); window.cashReceived=100; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-emerald-50 active:text-emerald-700 active:border-emerald-200 active:scale-95 transition-all shadow-sm hover:bg-gray-50">100</button>
+                          <button type="button" onclick="window.vibrate(15); window.cashReceived=500; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-emerald-50 active:text-emerald-700 active:border-emerald-200 active:scale-95 transition-all shadow-sm hover:bg-gray-50">500</button>
+                          <button type="button" onclick="window.vibrate(15); window.cashReceived=1000; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-emerald-50 active:text-emerald-700 active:border-emerald-200 active:scale-95 transition-all shadow-sm hover:bg-gray-50">1,000</button>
+                        </div>
+                      </div>
+                      ${window.cashReceived !== '' ? `
+                        <div class="p-4 rounded-[1rem] text-center font-bold text-base shadow-inner ${changeAmount >= 0 ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'} animate-fade-in">
+                          ${changeAmount >= 0 ? `💵 ทอนเงินลูกค้า: <span class="text-3xl font-black text-emerald-600 ml-2 block mt-1">${changeAmount.toLocaleString()} ฿</span>` : `⚠️ เงินไม่พอ: ขาดอีก <span class="text-xl font-black text-red-600 ml-1">${Math.abs(changeAmount).toLocaleString()} ฿</span>`}
+                        </div>
+                      ` : ''}
+                    ` : `
+                      <div class="flex flex-col items-center justify-center p-2 w-full animate-fade-in">
+                        ${qrHtml}
+                      </div>
+                    `}
+                  </div>
+                ` : ''}
+
+                <!-- ปุ่มบันทึกรายการสำหรับ Desktop (ฝังในการ์ด) -->
+                <div class="hidden md:block mt-6 pt-5 border-t border-gray-100">
+                  <div class="flex justify-between items-end mb-4 px-1">
+                    <div>
+                      <p class="text-gray-500 text-[10px] font-bold mb-0.5">บริการ ${calcTotal} + หนี้เก่า ${safeNum(cust.debt)} ${window.isRemoteArea ? '<span class="text-amber-600">(ไกล)</span>' : ''}</p>
+                      <p class="text-[13px] text-gray-800 font-black uppercase tracking-wide">ต้องเก็บเงินรวม</p>
+                    </div>
+                    <span class="text-4xl font-black tracking-tight ${window.paymentStatus === 'support' ? 'text-pink-500' : 'text-blue-700'}">${totalToCollect} ฿</span>
+                  </div>
+                  <button id="btn-submit-delivery-desktop" onclick="window.submitDelivery()" class="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-600/30 active:scale-95 transition-all text-lg flex justify-center items-center tracking-wide hover:bg-blue-700">บันทึกรายการ</button>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div class="fixed bottom-0 left-0 right-0 bg-white/85 backdrop-blur-xl border-t border-gray-200/50 p-4 pb-safe shadow-[0_-10px_30px_-5px_rgba(0,0,0,0.1)] max-w-md mx-auto z-40">
+          <!-- ปุ่มบันทึกรายการสำหรับ Mobile (ยึดติดขอบล่าง) -->
+          <div class="md:hidden fixed bottom-0 left-0 right-0 bg-white/85 backdrop-blur-xl border-t border-gray-200/50 p-4 pb-safe shadow-[0_-10px_30px_-5px_rgba(0,0,0,0.1)] z-40">
             <div class="flex justify-between items-end mb-3 px-2">
               <div>
                 <p class="text-gray-500 text-[10px] font-bold mb-0.5">
@@ -1413,13 +1495,14 @@
       const custTx = window.transactions.filter(t => t.customerId === window.selectedCustomerId).sort((a,b) => b.timestamp - a.timestamp);
 
       container.innerHTML = `
-        <div class="p-4 max-w-md mx-auto pb-24 page-transition">
-          <div class="flex items-center mb-6 pt-2 sticky top-2 z-20">
-            <button onclick="window.switchView('delivery')" class="p-2.5 mr-3 bg-white/80 backdrop-blur-md rounded-full shadow-sm text-gray-600 active:scale-90 transition-all border border-gray-100"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
-            <div><h2 class="font-black text-xl text-gray-800 leading-tight">ประวัติบิล</h2><p class="text-xs font-bold text-gray-500">${activeCust.name}</p></div>
+        <div class="p-4 md:p-6 pb-24 md:pb-8 page-transition">
+          <div class="flex items-center mb-6 pt-2 sticky top-2 z-20 bg-gray-100/90 backdrop-blur-md p-2 -mx-2 rounded-2xl">
+            <button onclick="window.switchView('delivery')" class="p-2.5 mr-3 bg-white shadow-sm rounded-full text-gray-600 active:scale-90 transition-all border border-gray-200 hover:bg-gray-50"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+            <div><h2 class="font-black text-xl text-gray-800 leading-tight">ประวัติบิล</h2><p class="text-xs font-bold text-gray-500 mt-0.5">${activeCust.name}</p></div>
           </div>
-          <div class="space-y-4">
-            ${custTx.length === 0 ? `<div class="text-center py-12 text-gray-400 bg-white rounded-3xl border border-gray-100 shadow-sm"><i data-lucide="file-x" class="w-10 h-10 mx-auto mb-3 opacity-30"></i><span class="text-sm font-bold">ไม่มีประวัติบิล</span></div>` : custTx.map(tx => renderTxCardHtml(tx, false)).join('')}
+          <!-- 💻 Grid สำหรับ Responsive Desktop -->
+          <div class="space-y-4 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-4 md:space-y-0">
+            ${custTx.length === 0 ? `<div class="col-span-full text-center py-12 text-gray-400 bg-white rounded-3xl border border-gray-100 shadow-sm"><i data-lucide="file-x" class="w-10 h-10 mx-auto mb-3 opacity-30"></i><span class="text-sm font-bold">ไม่มีประวัติบิล</span></div>` : custTx.map(tx => renderTxCardHtml(tx, false)).join('')}
           </div>
         </div>
       `;
@@ -1429,12 +1512,13 @@
       const sortedTx = [...window.transactions].sort((a,b) => b.timestamp - a.timestamp).slice(0, 50);
 
       container.innerHTML = `
-        <div class="pb-24 page-transition">
-          <div class="mb-5 flex items-end bg-blue-600 text-white px-5 pt-8 pb-5 rounded-b-[2rem] shadow-lg shadow-blue-600/20 sticky top-0 z-20">
-            <div><h1 class="text-2xl font-black tracking-tight flex items-center"><i data-lucide="file-text" class="w-6 h-6 mr-2"></i> บิลย้อนหลังล่าสุด</h1></div>
+        <div class="pb-24 md:pb-8 page-transition">
+          <div class="mb-5 flex items-end bg-blue-600 text-white px-5 pt-8 pb-5 md:pt-10 md:pb-6 rounded-b-[2rem] shadow-lg shadow-blue-600/20 sticky top-0 z-20 md:rounded-none">
+            <div><h1 class="text-2xl md:text-3xl font-black tracking-tight flex items-center"><i data-lucide="file-text" class="w-6 h-6 md:w-8 md:h-8 mr-2 md:mr-3"></i> บิลย้อนหลังล่าสุด</h1></div>
           </div>
-          <div class="space-y-4 px-4">
-            ${sortedTx.length === 0 ? `<div class="text-center py-12 text-gray-400 bg-white rounded-3xl border border-gray-100 shadow-sm"><i data-lucide="file-x" class="w-10 h-10 mx-auto mb-3 opacity-30"></i><span class="text-sm font-bold">ไม่มีประวัติบิล</span></div>` : sortedTx.map(tx => renderTxCardHtml(tx, true)).join('')}
+          <!-- 💻 Grid สำหรับ Responsive Desktop -->
+          <div class="space-y-4 px-4 md:px-6 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-4 md:space-y-0">
+            ${sortedTx.length === 0 ? `<div class="col-span-full text-center py-12 text-gray-400 bg-white rounded-3xl border border-gray-100 shadow-sm"><i data-lucide="file-x" class="w-10 h-10 mx-auto mb-3 opacity-30"></i><span class="text-sm font-bold">ไม่มีประวัติบิล</span></div>` : sortedTx.map(tx => renderTxCardHtml(tx, true)).join('')}
           </div>
         </div>
       `;
@@ -1468,44 +1552,44 @@
       else moneyStr = `<span class="text-red-500">ค้าง ${safeNum(tx.addedDebt)} ฿</span>`;
 
       return `
-        <div class="p-4 rounded-[1.5rem] shadow-sm border transition-all ${tx.status === 'voided' ? 'bg-gray-100/50 border-gray-200 opacity-60 grayscale-[50%]' : 'bg-white border-gray-100 hover:shadow-md'}">
+        <div class="p-4 md:p-5 rounded-[1.5rem] shadow-sm border transition-all ${tx.status === 'voided' ? 'bg-gray-100/50 border-gray-200 opacity-60 grayscale-[50%]' : 'bg-white border-gray-100 hover:shadow-md'} flex flex-col h-full">
           <div class="flex justify-between items-start mb-3 border-b border-gray-100 pb-3">
             <div>
-              ${showCustomerName ? `<h4 class="font-black text-blue-900 mb-1 flex items-center text-sm"><i data-lucide="user" class="w-3.5 h-3.5 mr-1.5 text-blue-500"></i> ${tx.customerName}</h4>` : ''}
+              ${showCustomerName ? `<h4 class="font-black text-blue-900 mb-1.5 flex items-center text-sm"><i data-lucide="user" class="w-3.5 h-3.5 mr-1.5 text-blue-500"></i> ${tx.customerName}</h4>` : ''}
               <p class="text-xs font-bold text-gray-500 flex items-center"><i data-lucide="history" class="w-3.5 h-3.5 mr-1 text-gray-400"></i> ${window.formatDate(tx.timestamp)}</p>
-              <div class="flex gap-1.5 mt-2 flex-wrap">
+              <div class="flex gap-1.5 mt-2.5 flex-wrap">
                 ${statusBadge}
                 ${tx.isRemoteArea ? `<span class="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-md font-bold inline-block">ส่งไกล(+ค่าส่ง)</span>` : ''}
                 <span class="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md font-bold inline-flex items-center border border-gray-200"><i data-lucide="truck" class="w-3 h-3 mr-1"></i> ${tx.createdBy || 'ไม่ระบุ'}</span>
               </div>
             </div>
-            ${tx.status !== 'voided' && ['admin', 'super_admin'].includes(window.currentUser.role) ? `<button onclick="window.voidTransaction('${tx.id}')" class="text-red-600 text-[10px] font-black flex items-center bg-red-50 px-2.5 py-1.5 rounded-lg active:scale-90 transition-all border border-red-100 shadow-sm"><i data-lucide="trash-2" class="w-3 h-3 mr-1"></i> ยกเลิกบิล</button>` : ''}
+            ${tx.status !== 'voided' && ['admin', 'super_admin'].includes(window.currentUser.role) ? `<button onclick="window.voidTransaction('${tx.id}')" class="text-red-600 text-[10px] font-black flex items-center bg-red-50 px-2.5 py-1.5 rounded-lg active:scale-90 transition-all border border-red-100 shadow-sm hover:bg-red-100"><i data-lucide="trash-2" class="w-3 h-3 mr-1"></i> ยกเลิกบิล</button>` : ''}
           </div>
           
-          <div class="grid grid-cols-2 gap-x-2 gap-y-3 text-xs text-gray-700">
+          <div class="grid grid-cols-2 gap-x-2 gap-y-3 text-xs text-gray-700 flex-1">
             <div>
               <p class="font-black text-[9px] text-gray-400 mb-1.5 uppercase tracking-widest">ส่งน้ำออก</p>
-              ${dO > 0 ? `<p class="flex justify-between font-bold"><span>ส้ม</span> <span class="text-orange-600">${dO}</span></p>` : ''}
-              ${dP > 0 ? `<p class="flex justify-between font-bold"><span>ม่วง</span> <span class="text-purple-600">${dP}</span></p>` : ''}
-              ${dC > 0 ? `<p class="flex justify-between font-bold"><span>ลัง</span> <span class="text-amber-700">${dC}</span></p>` : ''}
-              ${dO===0&&dP===0&&dC===0 ? `<p class="text-gray-300">-</p>` : ''}
+              ${dO > 0 ? `<p class="flex justify-between font-bold py-0.5"><span>ส้ม</span> <span class="text-orange-600">${dO}</span></p>` : ''}
+              ${dP > 0 ? `<p class="flex justify-between font-bold py-0.5"><span>ม่วง</span> <span class="text-purple-600">${dP}</span></p>` : ''}
+              ${dC > 0 ? `<p class="flex justify-between font-bold py-0.5"><span>ลัง</span> <span class="text-amber-700">${dC}</span></p>` : ''}
+              ${dO===0&&dP===0&&dC===0 ? `<p class="text-gray-300 py-0.5">-</p>` : ''}
             </div>
             <div>
               <p class="font-black text-[9px] text-gray-400 mb-1.5 uppercase tracking-widest">รับคืนเปล่า</p>
-              ${rO > 0 ? `<p class="flex justify-between font-bold"><span>ส้ม</span> <span>${rO}</span></p>` : ''}
-              ${rP > 0 ? `<p class="flex justify-between font-bold"><span>ม่วง</span> <span>${rP}</span></p>` : ''}
-              ${rC > 0 ? `<p class="flex justify-between font-bold"><span>ลัง</span> <span>${rC}</span></p>` : ''}
-              ${rO===0&&rP===0&&rC===0 ? `<p class="text-gray-300">-</p>` : ''}
+              ${rO > 0 ? `<p class="flex justify-between font-bold py-0.5"><span>ส้ม</span> <span>${rO}</span></p>` : ''}
+              ${rP > 0 ? `<p class="flex justify-between font-bold py-0.5"><span>ม่วง</span> <span>${rP}</span></p>` : ''}
+              ${rC > 0 ? `<p class="flex justify-between font-bold py-0.5"><span>ลัง</span> <span>${rC}</span></p>` : ''}
+              ${rO===0&&rP===0&&rC===0 ? `<p class="text-gray-300 py-0.5">-</p>` : ''}
             </div>
             ${(oTW>0 || oTR>0 || oDD>0 || oTU>0 || oDPW>0 || oDPR>0) ? `
               <div class="col-span-2 pt-2 border-t border-gray-50">
                 <p class="font-black text-[9px] text-indigo-400 mb-1.5 uppercase tracking-widest flex items-center"><i data-lucide="archive" class="w-3 h-3 mr-1"></i> ถังส่วนตัวลูกค้า</p>
-                ${oTW > 0 ? `<p class="flex justify-between font-bold text-indigo-700"><span>รับมา (จ่ายเลย 5฿)</span> <span>${oTW}</span></p>` : ''}
-                ${oTR > 0 ? `<p class="flex justify-between font-bold text-indigo-700"><span>รับมา (จ่ายเลย 15฿)</span> <span>${oTR}</span></p>` : ''}
-                ${oTU > 0 ? `<p class="flex justify-between font-bold text-indigo-500"><span>รับมา (รอก่อน)</span> <span>${oTU}</span></p>` : ''}
-                ${oDD > 0 ? `<p class="flex justify-between font-bold text-gray-500"><span>ส่งคืน (เสร็จแล้ว)</span> <span>${oDD}</span></p>` : ''}
-                ${oDPW > 0 ? `<p class="flex justify-between font-bold text-indigo-700"><span>ส่งคืน (เก็บ 5฿)</span> <span>${oDPW}</span></p>` : ''}
-                ${oDPR > 0 ? `<p class="flex justify-between font-bold text-indigo-700"><span>ส่งคืน (เก็บ 15฿)</span> <span>${oDPR}</span></p>` : ''}
+                ${oTW > 0 ? `<p class="flex justify-between font-bold text-indigo-700 py-0.5"><span>รับมา (จ่ายเลย 5฿)</span> <span>${oTW}</span></p>` : ''}
+                ${oTR > 0 ? `<p class="flex justify-between font-bold text-indigo-700 py-0.5"><span>รับมา (จ่ายเลย 15฿)</span> <span>${oTR}</span></p>` : ''}
+                ${oTU > 0 ? `<p class="flex justify-between font-bold text-indigo-500 py-0.5"><span>รับมา (รอก่อน)</span> <span>${oTU}</span></p>` : ''}
+                ${oDD > 0 ? `<p class="flex justify-between font-bold text-gray-500 py-0.5"><span>ส่งคืน (เสร็จแล้ว)</span> <span>${oDD}</span></p>` : ''}
+                ${oDPW > 0 ? `<p class="flex justify-between font-bold text-indigo-700 py-0.5"><span>ส่งคืน (เก็บ 5฿)</span> <span>${oDPW}</span></p>` : ''}
+                ${oDPR > 0 ? `<p class="flex justify-between font-bold text-indigo-700 py-0.5"><span>ส่งคืน (เก็บ 15฿)</span> <span>${oDPR}</span></p>` : ''}
               </div>
             ` : ''}
           </div>
@@ -1513,7 +1597,7 @@
           ${tx.note ? `<div class="mt-3 bg-yellow-50 text-yellow-800 p-2.5 rounded-xl text-[11px] font-bold border border-yellow-100 flex items-start"><i data-lucide="message-square" class="w-3.5 h-3.5 mr-1.5 mt-0.5 shrink-0 text-yellow-600"></i> ${tx.note}</div>` : ''}
 
           <div class="mt-4 pt-3 border-t border-gray-100 flex justify-between items-center font-black">
-            <span class="text-gray-500 text-xs">รวมเงินบิลนี้ <span class="text-[9px] font-bold text-gray-400 ml-1">(${safeNum(tx.totalAmount)} ฿):</span></span>
+            <span class="text-gray-500 text-xs">รวมเงิน <span class="text-[9px] font-bold text-gray-400 ml-1">(${safeNum(tx.totalAmount)} ฿):</span></span>
             ${moneyStr}
           </div>
         </div>
@@ -1571,32 +1655,33 @@
 
         const totalDel = stats.dO + stats.dP + stats.dC;
         const staffCashHTML = Object.keys(stats.staffCash).map(name => `
-          <div class="flex justify-between items-center py-2.5 border-b border-emerald-100/50 last:border-0">
+          <div class="flex justify-between items-center py-2.5 border-b border-emerald-100/50 last:border-0 hover:bg-white/50 px-2 rounded-lg transition-colors">
             <span class="text-sm font-bold text-emerald-800 flex items-center"><i data-lucide="truck" class="w-4 h-4 mr-2 text-emerald-600"></i> ${name}</span>
             <span class="text-base font-black text-emerald-700">${stats.staffCash[name].toLocaleString()} ฿</span>
           </div>
-        `).join('') || '<p class="text-sm text-emerald-600/50 text-center py-2">ไม่มีข้อมูล</p>';
+        `).join('') || '<p class="text-sm text-emerald-600/50 text-center py-4">ไม่มีข้อมูล</p>';
 
         reportHtml = `
           ${window.reportMode === 'daily' ? `
-            <div class="mb-5 bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex items-center transition-all">
-              <label class="text-xs font-bold text-gray-500 mr-3 w-16">เลือกวันที่:</label>
-              <input type="date" value="${window.reportDailyDate}" onchange="window.reportDailyDate=this.value; window.render();" class="flex-1 px-4 py-2 text-sm font-bold rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 bg-gray-50 outline-none transition-all" />
+            <div class="mb-5 bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex items-center transition-all md:w-max">
+              <label class="text-xs font-bold text-gray-500 mr-3 w-16 md:w-auto">เลือกวันที่:</label>
+              <input type="date" value="${window.reportDailyDate}" onchange="window.reportDailyDate=this.value; window.render();" class="flex-1 md:w-48 px-4 py-2 text-sm font-bold rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 bg-gray-50 outline-none transition-all" />
             </div>
           ` : `
-            <div class="mb-5 bg-white p-4 rounded-2xl shadow-sm border border-gray-100 transition-all">
-              <div class="flex items-center mb-2">
-                <label class="text-[10px] font-bold text-gray-400 w-12">ตั้งแต่:</label>
-                <input type="date" value="${window.reportCustomStart}" onchange="window.reportCustomStart=this.value; window.render();" class="flex-1 px-3 py-1.5 text-sm font-bold rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 bg-gray-50 outline-none transition-all" />
+            <div class="mb-5 bg-white p-4 rounded-2xl shadow-sm border border-gray-100 transition-all md:flex md:gap-4 md:w-max">
+              <div class="flex items-center mb-2 md:mb-0">
+                <label class="text-[10px] font-bold text-gray-400 w-12 md:w-auto md:mr-2">ตั้งแต่:</label>
+                <input type="date" value="${window.reportCustomStart}" onchange="window.reportCustomStart=this.value; window.render();" class="flex-1 md:w-40 px-3 py-1.5 text-sm font-bold rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 bg-gray-50 outline-none transition-all" />
               </div>
               <div class="flex items-center">
-                <label class="text-[10px] font-bold text-gray-400 w-12">ถึง:</label>
-                <input type="date" value="${window.reportCustomEnd}" onchange="window.reportCustomEnd=this.value; window.render();" class="flex-1 px-3 py-1.5 text-sm font-bold rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 bg-gray-50 outline-none transition-all" />
+                <label class="text-[10px] font-bold text-gray-400 w-12 md:w-auto md:mr-2">ถึง:</label>
+                <input type="date" value="${window.reportCustomEnd}" onchange="window.reportCustomEnd=this.value; window.render();" class="flex-1 md:w-40 px-3 py-1.5 text-sm font-bold rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 bg-gray-50 outline-none transition-all" />
               </div>
             </div>
           `}
 
-          <div class="grid grid-cols-2 gap-3 mb-5">
+          <!-- 💻 Grid สรุปยอด 4 กล่อง -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
             <div class="bg-white p-4 rounded-[1.5rem] shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-emerald-50 flex flex-col justify-center items-center text-center transition-all hover:shadow-md">
               <span class="text-gray-500 text-[10px] font-black mb-1 flex items-center uppercase tracking-wider"><i data-lucide="banknote" class="w-3.5 h-3.5 mr-1 text-emerald-500"></i> รับเงินสด</span>
               <span class="text-2xl font-black text-emerald-600">${stats.cashRev.toLocaleString()}</span>
@@ -1615,44 +1700,55 @@
             </div>
           </div>
 
-          <div class="bg-gradient-to-br from-emerald-50 to-emerald-100/50 p-5 rounded-[1.5rem] shadow-sm border border-emerald-100 mb-5">
-            <h3 class="font-black text-emerald-900 mb-3 flex items-center">
-              <div class="bg-emerald-200/50 p-1.5 rounded-lg mr-2"><i data-lucide="wallet" class="w-4 h-4 text-emerald-700"></i></div> 
-              ยอดเงินสดส่งโรงงาน <span class="text-[10px] font-bold text-emerald-600 bg-white px-2 py-0.5 rounded-md ml-2 shadow-sm border border-emerald-100">แยกพนักงาน</span>
-            </h3>
-            <div class="space-y-1 bg-white/60 p-2 rounded-xl border border-emerald-50">
-              ${staffCashHTML}
-            </div>
-          </div>
+          <!-- 💻 Grid สำหรับ Responsive Desktop -->
+          <div class="md:grid md:grid-cols-2 md:gap-6 md:items-start">
+            
+            <!-- ซ้าย: การส่งน้ำ -->
+            <div class="space-y-5">
+              <div class="bg-white p-5 rounded-[1.5rem] shadow-sm border border-gray-100">
+                <h3 class="font-black text-gray-800 mb-4 flex items-center text-base"><i data-lucide="package" class="w-5 h-5 mr-2 text-blue-500"></i> ส่งน้ำใหม่ (ออก ${totalDel})</h3>
+                <div class="space-y-4">
+                  <div>
+                    <div class="flex justify-between text-sm font-bold text-gray-700 mb-1.5"><span class="flex items-center text-orange-600"><i data-lucide="droplet" class="w-4 h-4 mr-1.5"></i> ถังส้ม</span><span>ส่ง <b class="text-gray-900">${stats.dO}</b> / คืน ${stats.rO}</span></div>
+                    <div class="w-full bg-gray-100 rounded-full h-2.5 flex"><div class="bg-orange-500 h-2.5 rounded-full transition-all duration-1000 ease-out" style="width: ${totalDel ? (stats.dO/totalDel)*100 : 0}%"></div></div>
+                  </div>
+                  <div>
+                    <div class="flex justify-between text-sm font-bold text-gray-700 mb-1.5"><span class="flex items-center text-purple-600"><i data-lucide="droplet" class="w-4 h-4 mr-1.5"></i> ถังม่วง</span><span>ส่ง <b class="text-gray-900">${stats.dP}</b> / คืน ${stats.rP}</span></div>
+                    <div class="w-full bg-gray-100 rounded-full h-2.5 flex"><div class="bg-purple-600 h-2.5 rounded-full transition-all duration-1000 ease-out" style="width: ${totalDel ? (stats.dP/totalDel)*100 : 0}%"></div></div>
+                  </div>
+                  <div>
+                    <div class="flex justify-between text-sm font-bold text-gray-700 mb-1.5"><span class="flex items-center text-amber-700"><i data-lucide="package" class="w-4 h-4 mr-1.5"></i> แบบลัง</span><span>ส่ง <b class="text-gray-900">${stats.dC}</b> / คืน ${stats.rC}</span></div>
+                    <div class="w-full bg-gray-100 rounded-full h-2.5 flex"><div class="bg-amber-700 h-2.5 rounded-full transition-all duration-1000 ease-out" style="width: ${totalDel ? (stats.dC/totalDel)*100 : 0}%"></div></div>
+                  </div>
+                </div>
+              </div>
 
-          <div class="bg-white p-5 rounded-[1.5rem] shadow-sm border border-gray-100 mb-5">
-            <h3 class="font-black text-gray-800 mb-4 flex items-center text-base"><i data-lucide="package" class="w-5 h-5 mr-2 text-blue-500"></i> ส่งน้ำใหม่ (ออก ${totalDel})</h3>
-            <div class="space-y-4">
-              <div>
-                <div class="flex justify-between text-sm font-bold text-gray-700 mb-1.5"><span class="flex items-center text-orange-600"><i data-lucide="droplet" class="w-4 h-4 mr-1.5"></i> ถังส้ม</span><span>ส่ง <b class="text-gray-900">${stats.dO}</b> / คืน ${stats.rO}</span></div>
-                <div class="w-full bg-gray-100 rounded-full h-2.5 flex"><div class="bg-orange-500 h-2.5 rounded-full transition-all duration-1000 ease-out" style="width: ${totalDel ? (stats.dO/totalDel)*100 : 0}%"></div></div>
-              </div>
-              <div>
-                <div class="flex justify-between text-sm font-bold text-gray-700 mb-1.5"><span class="flex items-center text-purple-600"><i data-lucide="droplet" class="w-4 h-4 mr-1.5"></i> ถังม่วง</span><span>ส่ง <b class="text-gray-900">${stats.dP}</b> / คืน ${stats.rP}</span></div>
-                <div class="w-full bg-gray-100 rounded-full h-2.5 flex"><div class="bg-purple-600 h-2.5 rounded-full transition-all duration-1000 ease-out" style="width: ${totalDel ? (stats.dP/totalDel)*100 : 0}%"></div></div>
-              </div>
-              <div>
-                <div class="flex justify-between text-sm font-bold text-gray-700 mb-1.5"><span class="flex items-center text-amber-700"><i data-lucide="package" class="w-4 h-4 mr-1.5"></i> แบบลัง</span><span>ส่ง <b class="text-gray-900">${stats.dC}</b> / คืน ${stats.rC}</span></div>
-                <div class="w-full bg-gray-100 rounded-full h-2.5 flex"><div class="bg-amber-700 h-2.5 rounded-full transition-all duration-1000 ease-out" style="width: ${totalDel ? (stats.dC/totalDel)*100 : 0}%"></div></div>
+              <div class="bg-indigo-50/70 p-5 rounded-[1.5rem] shadow-sm border border-indigo-100">
+                <h3 class="font-black text-indigo-900 mb-3 flex items-center justify-between">
+                  <span class="flex items-center"><i data-lucide="archive" class="w-5 h-5 mr-2 text-indigo-600"></i> บริการถังส่วนตัว</span>
+                </h3>
+                <div class="space-y-1 text-[13px] font-bold text-indigo-800 bg-white/60 p-3 rounded-xl border border-indigo-50">
+                  <div class="flex justify-between py-2 border-b border-indigo-100/50 hover:bg-white/50 px-2 rounded-md transition-colors"><span>ล้างเปล่า (5฿)</span><span>${stats.oW}</span></div>
+                  <div class="flex justify-between py-2 border-b border-indigo-100/50 hover:bg-white/50 px-2 rounded-md transition-colors"><span>ล้าง+เติม (15฿)</span><span>${stats.oR}</span></div>
+                  <div class="flex justify-between py-2 border-b border-indigo-100/50 text-indigo-400 hover:bg-white/50 px-2 rounded-md transition-colors"><span>รับมาทำ (รอเก็บเงิน)</span><span>${stats.oTU}</span></div>
+                  <div class="flex justify-between py-2 text-gray-500 hover:bg-white/50 px-2 rounded-md transition-colors"><span>ส่งคืน (เสร็จแล้ว)</span><span>${stats.oRet}</span></div>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div class="bg-indigo-50/70 p-5 rounded-[1.5rem] shadow-sm border border-indigo-100 mb-6">
-            <h3 class="font-black text-indigo-900 mb-3 flex items-center justify-between">
-              <span class="flex items-center"><i data-lucide="archive" class="w-5 h-5 mr-2 text-indigo-600"></i> บริการถังส่วนตัว</span>
-            </h3>
-            <div class="space-y-1 text-[13px] font-bold text-indigo-800 bg-white/60 p-3 rounded-xl border border-indigo-50">
-              <div class="flex justify-between py-1.5 border-b border-indigo-100/50"><span>ล้างเปล่า (5฿)</span><span>${stats.oW}</span></div>
-              <div class="flex justify-between py-1.5 border-b border-indigo-100/50"><span>ล้าง+เติม (15฿)</span><span>${stats.oR}</span></div>
-              <div class="flex justify-between py-1.5 border-b border-indigo-100/50 text-indigo-400"><span>รับมาทำ (รอเก็บเงิน)</span><span>${stats.oTU}</span></div>
-              <div class="flex justify-between py-1.5 text-gray-500"><span>ส่งคืน (เสร็จแล้ว)</span><span>${stats.oRet}</span></div>
+            <!-- ขวา: ยอดเงิน -->
+            <div class="space-y-5 mt-5 md:mt-0">
+              <div class="bg-gradient-to-br from-emerald-50 to-emerald-100/50 p-5 rounded-[1.5rem] shadow-sm border border-emerald-100">
+                <h3 class="font-black text-emerald-900 mb-3 flex items-center">
+                  <div class="bg-emerald-200/50 p-1.5 rounded-lg mr-2"><i data-lucide="wallet" class="w-4 h-4 text-emerald-700"></i></div> 
+                  ยอดเงินสดส่งโรงงาน <span class="text-[10px] font-bold text-emerald-600 bg-white px-2 py-0.5 rounded-md ml-2 shadow-sm border border-emerald-100">แยกพนักงาน</span>
+                </h3>
+                <div class="space-y-1 bg-white/60 p-2 rounded-xl border border-emerald-50">
+                  ${staffCashHTML}
+                </div>
+              </div>
             </div>
+
           </div>
         `;
       } else if (window.reportMode === 'monthly' || window.reportMode === 'yearly') {
@@ -1690,8 +1786,8 @@
         const sortedGroups = Object.values(grouped).sort((a,b) => b.sortValue - a.sortValue);
 
         reportHtml = `
-          <div class="space-y-4 mb-6">
-            ${sortedGroups.length === 0 ? '<div class="text-center bg-white p-8 rounded-3xl border border-gray-100"><p class="text-gray-400 font-bold">ไม่มีข้อมูล</p></div>' : sortedGroups.map(g => `
+          <div class="space-y-4 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-5 md:space-y-0 mb-6">
+            ${sortedGroups.length === 0 ? '<div class="col-span-full text-center bg-white p-8 rounded-3xl border border-gray-100"><p class="text-gray-400 font-bold">ไม่มีข้อมูล</p></div>' : sortedGroups.map(g => `
               <div class="bg-white p-5 rounded-[1.5rem] shadow-sm border border-gray-100 transition-all hover:shadow-md">
                 <h3 class="font-black text-lg text-blue-900 border-b border-gray-100 pb-3 mb-4 flex justify-between items-center">
                   <span><i data-lucide="calendar" class="w-5 h-5 inline mr-1.5 text-blue-500 mb-0.5"></i> ${g.key}</span>
@@ -1723,66 +1819,72 @@
 
       container.innerHTML = `
         <div class="pb-24 page-transition">
-          <div class="bg-blue-600 text-white px-5 pt-8 pb-6 rounded-b-[2rem] shadow-lg shadow-blue-600/20 mb-6 sticky top-0 z-20">
-            <div><h1 class="text-2xl font-black tracking-tight">รายงานและบัญชี</h1></div>
+          <div class="bg-blue-600 text-white px-5 pt-8 pb-6 md:pt-10 md:pb-8 rounded-b-[2rem] md:rounded-none shadow-lg shadow-blue-600/20 mb-6 sticky top-0 z-20">
+            <div><h1 class="text-2xl md:text-3xl font-black tracking-tight flex items-center"><i data-lucide="pie-chart" class="w-6 h-6 md:w-8 md:h-8 mr-2 md:mr-3"></i> รายงานและบัญชี</h1></div>
           </div>
           
-          <div class="px-4">
-            <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-6">
-              <h3 class="text-sm font-black text-gray-800 mb-3 flex items-center"><i data-lucide="file-spreadsheet" class="w-4 h-4 mr-2 text-green-600"></i> โหลดข้อมูลเข้า Excel</h3>
-              <div class="grid grid-cols-2 gap-3 mb-4">
-                <div>
-                  <label class="text-[10px] font-bold text-gray-400 ml-1 uppercase">ตั้งแต่วันที่</label>
-                  <input type="date" id="export-start-date" value="${window.exportStartDate}" onchange="window.exportStartDate=this.value" class="w-full px-3 py-2.5 text-xs font-bold rounded-xl border border-gray-200 focus:ring-2 focus:ring-green-500 bg-gray-50 outline-none transition-all" />
-                </div>
-                <div>
-                  <label class="text-[10px] font-bold text-gray-400 ml-1 uppercase">ถึงวันที่</label>
-                  <input type="date" id="export-end-date" value="${window.exportEndDate}" onchange="window.exportEndDate=this.value" class="w-full px-3 py-2.5 text-xs font-bold rounded-xl border border-gray-200 focus:ring-2 focus:ring-green-500 bg-gray-50 outline-none transition-all" />
+          <div class="px-4 md:px-6">
+            <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-6 flex flex-col md:flex-row md:items-end md:justify-between md:gap-6">
+              <div class="flex-1 w-full mb-4 md:mb-0">
+                <h3 class="text-sm font-black text-gray-800 mb-3 flex items-center"><i data-lucide="file-spreadsheet" class="w-4 h-4 mr-2 text-green-600"></i> โหลดข้อมูลเข้า Excel</h3>
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="text-[10px] font-bold text-gray-400 ml-1 uppercase">ตั้งแต่วันที่</label>
+                    <input type="date" id="export-start-date" value="${window.exportStartDate}" onchange="window.exportStartDate=this.value" class="w-full px-3 py-2.5 text-xs font-bold rounded-xl border border-gray-200 focus:ring-2 focus:ring-green-500 bg-gray-50 outline-none transition-all cursor-pointer" />
+                  </div>
+                  <div>
+                    <label class="text-[10px] font-bold text-gray-400 ml-1 uppercase">ถึงวันที่</label>
+                    <input type="date" id="export-end-date" value="${window.exportEndDate}" onchange="window.exportEndDate=this.value" class="w-full px-3 py-2.5 text-xs font-bold rounded-xl border border-gray-200 focus:ring-2 focus:ring-green-500 bg-gray-50 outline-none transition-all cursor-pointer" />
+                  </div>
                 </div>
               </div>
-              <button onclick="window.vibrate(30); window.downloadExcelRange()" class="w-full bg-green-600 text-white py-3.5 rounded-2xl text-sm font-black shadow-md shadow-green-600/30 active:scale-95 flex items-center justify-center transition-all"><i data-lucide="download" class="w-5 h-5 mr-1.5"></i> ดาวน์โหลด Excel</button>
+              <button onclick="window.vibrate(30); window.downloadExcelRange()" class="w-full md:w-auto md:px-8 bg-green-600 text-white py-3.5 rounded-2xl text-sm font-black shadow-md shadow-green-600/30 active:scale-95 hover:bg-green-700 flex items-center justify-center transition-all"><i data-lucide="download" class="w-5 h-5 mr-1.5"></i> ดาวน์โหลด Excel</button>
             </div>
 
             <h3 class="text-sm font-black text-gray-800 mb-3 ml-1 flex items-center"><i data-lucide="bar-chart-2" class="w-4 h-4 mr-1 text-blue-500"></i> สรุปยอดขายบนแอป</h3>
-            <div class="flex bg-gray-200 p-1 rounded-xl mb-5 shadow-inner">
-              <button onclick="window.vibrate(15); window.reportMode='daily'; window.render();" class="flex-1 py-2.5 text-xs font-bold rounded-lg transition-all active:scale-95 ${window.reportMode === 'daily' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 active:bg-gray-300'}">รายวัน</button>
-              <button onclick="window.vibrate(15); window.reportMode='monthly'; window.render();" class="flex-1 py-2.5 text-xs font-bold rounded-lg transition-all active:scale-95 ${window.reportMode === 'monthly' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 active:bg-gray-300'}">รายเดือน</button>
-              <button onclick="window.vibrate(15); window.reportMode='yearly'; window.render();" class="flex-1 py-2.5 text-xs font-bold rounded-lg transition-all active:scale-95 ${window.reportMode === 'yearly' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 active:bg-gray-300'}">รายปี</button>
-              <button onclick="window.vibrate(15); window.reportMode='custom'; window.render();" class="flex-1 py-2.5 text-xs font-bold rounded-lg transition-all active:scale-95 ${window.reportMode === 'custom' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 active:bg-gray-300'}">กำหนดเอง</button>
+            <div class="flex bg-gray-200 p-1 rounded-xl mb-5 shadow-inner md:w-max">
+              <button onclick="window.vibrate(15); window.reportMode='daily'; window.render();" class="flex-1 md:w-32 py-2.5 text-xs font-bold rounded-lg transition-all active:scale-95 ${window.reportMode === 'daily' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:bg-gray-300/50'}">รายวัน</button>
+              <button onclick="window.vibrate(15); window.reportMode='monthly'; window.render();" class="flex-1 md:w-32 py-2.5 text-xs font-bold rounded-lg transition-all active:scale-95 ${window.reportMode === 'monthly' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:bg-gray-300/50'}">รายเดือน</button>
+              <button onclick="window.vibrate(15); window.reportMode='yearly'; window.render();" class="flex-1 md:w-32 py-2.5 text-xs font-bold rounded-lg transition-all active:scale-95 ${window.reportMode === 'yearly' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:bg-gray-300/50'}">รายปี</button>
+              <button onclick="window.vibrate(15); window.reportMode='custom'; window.render();" class="flex-1 md:w-32 py-2.5 text-xs font-bold rounded-lg transition-all active:scale-95 ${window.reportMode === 'custom' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:bg-gray-300/50'}">กำหนดเอง</button>
             </div>
 
             ${reportHtml}
 
+            <!-- ส่วนของ "สรุปยอดค้าง" ให้วางกางเต็มจอใน Desktop -->
             <div class="bg-white p-5 rounded-[1.5rem] shadow-sm border border-gray-100 mb-4 mt-8 relative overflow-hidden">
               <div class="absolute top-0 left-0 w-full h-1.5 bg-indigo-500"></div>
               <h3 class="font-black text-gray-800 mb-4 flex items-center text-lg mt-1"><i data-lucide="users" class="w-5 h-5 mr-2 text-indigo-500"></i> สรุปยอดค้าง (ทุกบ้าน)</h3>
-              <div class="mb-5 pb-5 border-b border-gray-100">
-                <div class="flex justify-between items-center mb-3 bg-gray-50 p-3 rounded-xl border border-gray-100">
+              
+              <div class="mb-5 pb-5 border-b border-gray-100 md:flex md:gap-5">
+                <div class="flex justify-between items-center mb-3 md:mb-0 bg-gray-50 p-4 rounded-2xl border border-gray-100 flex-1">
                   <span class="text-sm font-bold text-gray-600">หนี้เงินรวม:</span>
                   <span class="text-2xl font-black text-red-600">${totalCurrentDebt.toLocaleString()} ฿</span>
                 </div>
-                <div class="flex justify-between items-center">
+                <div class="flex justify-between items-center bg-gray-50 p-4 rounded-2xl border border-gray-100 flex-1">
                   <span class="text-xs font-bold text-gray-500">ถัง/ลัง ค้างรวม:</span>
                   <div class="flex gap-1.5 text-[10px] font-black flex-wrap justify-end">
-                    ${tO>0 ? `<span class="text-orange-600 bg-orange-50 px-2 py-1 rounded-md border border-orange-100">ส้ม ${tO}</span>` : ''}
-                    ${tP>0 ? `<span class="text-purple-600 bg-purple-50 px-2 py-1 rounded-md border border-purple-100">ม่วง ${tP}</span>` : ''}
-                    ${tC>0 ? `<span class="text-amber-700 bg-amber-50 px-2 py-1 rounded-md border border-amber-100">ลัง ${tC}</span>` : ''}
-                    ${tOwn>0 ? `<span class="text-indigo-700 bg-indigo-50 px-2 py-1 rounded-md border border-indigo-100"><i data-lucide="archive" class="w-2.5 h-2.5 inline mr-0.5"></i>ส่วนตัว ${tOwn}</span>` : ''}
+                    ${tO>0 ? `<span class="text-orange-600 bg-orange-100/50 px-2 py-1 rounded-md border border-orange-100">ส้ม ${tO}</span>` : ''}
+                    ${tP>0 ? `<span class="text-purple-600 bg-purple-100/50 px-2 py-1 rounded-md border border-purple-100">ม่วง ${tP}</span>` : ''}
+                    ${tC>0 ? `<span class="text-amber-700 bg-amber-100/50 px-2 py-1 rounded-md border border-amber-100">ลัง ${tC}</span>` : ''}
+                    ${tOwn>0 ? `<span class="text-indigo-700 bg-indigo-100/50 px-2 py-1 rounded-md border border-indigo-100"><i data-lucide="archive" class="w-2.5 h-2.5 inline mr-0.5"></i>ส่วนตัว ${tOwn}</span>` : ''}
                   </div>
                 </div>
               </div>
-              <div class="space-y-3 max-h-96 overflow-y-auto pr-1 no-scrollbar">
-                ${activeCustomers.length === 0 ? `<div class="py-8 text-center"><i data-lucide="check-circle" class="w-10 h-10 mx-auto text-gray-200 mb-2"></i><p class="text-sm text-gray-400 font-bold">ไม่มีข้อมูลคงค้าง</p></div>` : activeCustomers.map(c => `
-                  <div onclick="window.goToDelivery('${c.id}')" class="flex flex-col p-4 bg-gray-50 rounded-2xl border border-gray-100 active:scale-95 transition-all cursor-pointer shadow-sm">
-                    <div class="flex justify-between items-start mb-2.5">
+
+              <!-- 💻 Grid สำหรับลูกค้ายอดค้าง -->
+              <div class="space-y-3 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-4 md:space-y-0 max-h-[30rem] md:max-h-none overflow-y-auto pr-1 no-scrollbar pb-2">
+                ${activeCustomers.length === 0 ? `<div class="col-span-full py-8 text-center"><i data-lucide="check-circle" class="w-10 h-10 mx-auto text-gray-200 mb-2"></i><p class="text-sm text-gray-400 font-bold">ไม่มีข้อมูลคงค้าง</p></div>` : activeCustomers.map(c => `
+                  <div onclick="window.goToDelivery('${c.id}')" class="flex flex-col p-4 bg-white rounded-2xl border border-gray-200 active:scale-95 transition-all cursor-pointer shadow-sm hover:shadow-md hover:border-blue-200">
+                    <div class="flex justify-between items-start mb-3">
                       <span class="font-black text-gray-800 text-[13px] truncate pr-2">${c.name}</span>
                       <span class="font-black text-red-500 text-[13px] shrink-0 bg-red-50 px-2 py-0.5 rounded border border-red-100">${safeNum(c.debt) > 0 ? `${safeNum(c.debt).toLocaleString()} ฿` : '0 ฿'}</span>
                     </div>
                     <div class="flex gap-1.5 text-[9px] font-bold flex-wrap">
-                      ${safeNum(c.stockOrange) > 0 ? `<span class="flex items-center text-orange-600 bg-orange-100/50 px-1.5 py-0.5 rounded"><i data-lucide="droplet" class="w-2.5 h-2.5 mr-0.5"></i> ${c.stockOrange}</span>` : ''}
-                      ${safeNum(c.stockPurple) > 0 ? `<span class="flex items-center text-purple-600 bg-purple-100/50 px-1.5 py-0.5 rounded"><i data-lucide="droplet" class="w-2.5 h-2.5 mr-0.5"></i> ${c.stockPurple}</span>` : ''}
-                      ${safeNum(c.stockCrate) > 0 ? `<span class="flex items-center text-amber-700 bg-amber-100/50 px-1.5 py-0.5 rounded"><i data-lucide="package" class="w-2.5 h-2.5 mr-0.5"></i> ${c.stockCrate}</span>` : ''}
-                      ${safeNum(c.stockOwnBottle) > 0 ? `<span class="flex items-center text-indigo-600 bg-indigo-100/50 px-1.5 py-0.5 rounded"><i data-lucide="archive" class="w-2.5 h-2.5 mr-0.5"></i> ส่วนตัว ${c.stockOwnBottle}</span>` : ''}
+                      ${safeNum(c.stockOrange) > 0 ? `<span class="flex items-center text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100"><i data-lucide="droplet" class="w-2.5 h-2.5 mr-0.5"></i> ${c.stockOrange}</span>` : ''}
+                      ${safeNum(c.stockPurple) > 0 ? `<span class="flex items-center text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100"><i data-lucide="droplet" class="w-2.5 h-2.5 mr-0.5"></i> ${c.stockPurple}</span>` : ''}
+                      ${safeNum(c.stockCrate) > 0 ? `<span class="flex items-center text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100"><i data-lucide="package" class="w-2.5 h-2.5 mr-0.5"></i> ${c.stockCrate}</span>` : ''}
+                      ${safeNum(c.stockOwnBottle) > 0 ? `<span class="flex items-center text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100"><i data-lucide="archive" class="w-2.5 h-2.5 mr-0.5"></i> ส่วนตัว ${c.stockOwnBottle}</span>` : ''}
                     </div>
                   </div>
                 `).join('')}
@@ -1810,50 +1912,52 @@
 
       container.innerHTML = `
         <div class="pb-24 page-transition">
-          <div class="mb-6 flex items-end bg-indigo-600 text-white px-5 pt-8 pb-6 rounded-b-[2rem] shadow-lg shadow-indigo-600/20 sticky top-0 z-20">
-            <div><h1 class="text-2xl font-black tracking-tight flex items-center"><i data-lucide="user" class="w-6 h-6 mr-2"></i> โปรไฟล์ของฉัน</h1></div>
+          <div class="mb-6 flex items-end bg-indigo-600 text-white px-5 pt-8 pb-6 md:pt-10 md:pb-8 rounded-b-[2rem] md:rounded-none shadow-lg shadow-indigo-600/20 sticky top-0 z-20">
+            <div><h1 class="text-2xl md:text-3xl font-black tracking-tight flex items-center"><i data-lucide="user" class="w-6 h-6 md:w-8 md:h-8 mr-2 md:mr-3"></i> โปรไฟล์ของฉัน</h1></div>
           </div>
           
           <div class="px-4">
-            <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 mb-5 text-center relative overflow-hidden">
+            <!-- 💻 จำกัดความกว้างการ์ดตรงกลางจอสำหรับ Desktop -->
+            <div class="bg-white p-6 md:p-10 rounded-[2rem] shadow-sm border border-gray-100 mb-5 text-center relative overflow-hidden max-w-xl mx-auto">
               <div class="w-24 h-24 bg-indigo-50 text-indigo-600 rounded-full mx-auto flex items-center justify-center mb-4 border-4 border-white shadow-md"><i data-lucide="user" class="w-12 h-12"></i></div>
-              <h2 class="font-black text-2xl text-gray-800">${window.currentUser.name}</h2>
+              <h2 class="font-black text-2xl md:text-3xl text-gray-800">${window.currentUser.name}</h2>
               <p class="text-xs font-bold text-gray-400 mb-6 uppercase tracking-widest mt-1">พนักงานส่งน้ำ</p>
               
-              <div class="bg-gray-50/80 rounded-2xl p-5 mb-6 border border-gray-100 text-left">
+              <div class="bg-gray-50/80 rounded-2xl p-5 mb-8 border border-gray-100 text-left shadow-inner">
                 <p class="text-xs font-black text-indigo-800 mb-4 text-center border-b border-gray-200 pb-3 uppercase tracking-wider">ผลงานของฉันวันนี้</p>
                 
-                <div class="flex justify-between items-center mb-2">
+                <div class="flex justify-between items-center mb-2 hover:bg-white p-1 rounded transition-colors">
                   <span class="text-sm font-bold text-gray-700">รับเงินสด (ส่งโรงงาน):</span>
                   <span class="text-xl font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100">${myCash.toLocaleString()} ฿</span>
                 </div>
-                <div class="flex justify-between items-center mb-4 pb-4 border-b border-gray-200">
+                <div class="flex justify-between items-center mb-4 pb-4 border-b border-gray-200 hover:bg-white p-1 rounded transition-colors">
                   <span class="text-sm font-bold text-gray-700">ลูกค้าโอน QR:</span>
                   <span class="text-lg font-black text-blue-600">${myQR.toLocaleString()} ฿</span>
                 </div>
                 
-                <div class="flex justify-between items-center mb-2">
+                <div class="flex justify-between items-center mb-2 hover:bg-white p-1 rounded transition-colors">
                   <span class="text-xs font-bold text-gray-500">บิลสนับสนุน (ให้ฟรี):</span>
                   <span class="text-sm font-black text-pink-500">${mySupport.toLocaleString()} ฿</span>
                 </div>
                 
-                <div class="flex justify-between items-center mb-2">
+                <div class="flex justify-between items-center mb-2 hover:bg-white p-1 rounded transition-colors">
                   <span class="text-xs font-bold text-gray-600"><i data-lucide="droplet" class="w-3 h-3 inline mr-1 text-blue-500"></i>น้ำโรงงาน (ส่งแล้ว):</span>
                   <span class="text-sm font-black text-blue-600">${myDels} <span class="text-[10px] font-semibold text-gray-400">ถัง/ลัง</span></span>
                 </div>
                 
-                <div class="flex justify-between items-center mb-2">
+                <div class="flex justify-between items-center mb-2 hover:bg-white p-1 rounded transition-colors">
                   <span class="text-xs font-bold text-gray-600"><i data-lucide="check-circle" class="w-3 h-3 inline mr-1 text-gray-400"></i>น้ำโรงงาน (รับคืน):</span>
                   <span class="text-sm font-black text-gray-600">${myReturns} <span class="text-[10px] font-semibold text-gray-400">ถัง/ลัง</span></span>
                 </div>
 
-                <div class="flex justify-between items-center mt-3 pt-3 border-t border-gray-100">
+                <div class="flex justify-between items-center mt-3 pt-3 border-t border-gray-100 hover:bg-white p-1 rounded transition-colors">
                   <span class="text-xs font-bold text-gray-600"><i data-lucide="archive" class="w-3 h-3 inline mr-1 text-indigo-500"></i>บริการถังส่วนตัว:</span>
                   <span class="text-sm font-black text-indigo-600">${myOwn} <span class="text-[10px] font-semibold text-gray-400">ใบ</span></span>
                 </div>
               </div>
 
-              <button onclick="window.logout()" class="w-full py-4 bg-red-50 text-red-600 rounded-2xl font-black text-sm active:scale-95 transition-all shadow-sm border border-red-100">ออกจากระบบ</button>
+              <!-- ซ่อนปุ่มออกระบบในหน้าจอ Desktop เพราะมีที่ Sidebar แล้ว -->
+              <button onclick="window.logout()" class="md:hidden w-full py-4 bg-red-50 text-red-600 rounded-2xl font-black text-sm active:scale-95 transition-all shadow-sm border border-red-100 flex justify-center items-center"><i data-lucide="log-out" class="w-4 h-4 mr-2"></i> ออกจากระบบ</button>
             </div>
           </div>
         </div>
@@ -1867,94 +1971,101 @@
 
       container.innerHTML = `
         <div class="pb-24 page-transition">
-          <div class="mb-5 flex items-end bg-slate-800 text-white px-5 pt-8 pb-5 rounded-b-[2rem] shadow-lg shadow-slate-800/20 sticky top-0 z-20 justify-between">
-            <div><h1 class="text-2xl font-black tracking-tight flex items-center"><i data-lucide="settings" class="w-6 h-6 mr-2 text-slate-300"></i> จัดการระบบ</h1><p class="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-wider">แอดมิน: ${window.currentUser.name}</p></div>
-            <button onclick="window.logout()" class="p-2.5 bg-red-500/20 text-red-300 rounded-2xl active:scale-90 transition-all border border-red-500/30"><i data-lucide="log-out" class="w-5 h-5"></i></button>
+          <div class="mb-5 flex items-end bg-slate-800 text-white px-5 pt-8 pb-5 md:pt-10 md:pb-8 rounded-b-[2rem] md:rounded-none shadow-lg shadow-slate-800/20 sticky top-0 z-20 justify-between">
+            <div><h1 class="text-2xl md:text-3xl font-black tracking-tight flex items-center"><i data-lucide="settings" class="w-6 h-6 md:w-8 md:h-8 mr-2 md:mr-3 text-slate-300"></i> จัดการระบบ</h1><p class="text-[10px] md:text-xs text-slate-400 font-bold mt-1 uppercase tracking-wider">แอดมิน: ${window.currentUser.name}</p></div>
+            <button onclick="window.logout()" class="md:hidden p-2.5 bg-red-500/20 text-red-300 rounded-2xl active:scale-90 transition-all border border-red-500/30"><i data-lucide="log-out" class="w-5 h-5"></i></button>
           </div>
 
-          <div class="px-4 space-y-4">
-            <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
-              <h3 class="font-black text-gray-800 mb-4 flex items-center text-base"><i data-lucide="qr-code" class="w-5 h-5 mr-2 text-indigo-600"></i> ตั้งค่าพร้อมเพย์รับเงิน</h3>
-              <div class="flex gap-2">
-                <input type="text" id="promptpay-input" value="${window.globalStock.promptpayNumber || ''}" placeholder="เบอร์โทร (10 หลัก) หรือ ปชช. (13 หลัก)" class="flex-1 px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold bg-gray-50 outline-none transition-all">
-                <button onclick="window.savePromptPay()" class="bg-indigo-600 text-white px-5 py-3 rounded-xl font-black text-sm shadow-md shadow-indigo-600/30 active:scale-95 transition-all flex justify-center items-center">บันทึก</button>
-              </div>
-              <p class="text-[10px] font-bold text-gray-400 mt-3 bg-gray-50 p-2 rounded-lg">* ใช้สร้าง QR Code ให้ลูกค้าสแกนจ่ายอัตโนมัติตามยอดบิล</p>
-            </div>
-
-            <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
-              <div class="flex justify-between items-center mb-4">
-                <h3 class="font-black text-gray-800 flex items-center text-base"><i data-lucide="package-check" class="w-5 h-5 mr-2 text-blue-600"></i> สต๊อกพร้อมขาย (กลาง)</h3>
-              </div>
-              <p class="text-[10px] font-bold text-blue-600 mb-4 leading-tight bg-blue-50 p-2.5 rounded-lg border border-blue-100">* เมื่อพนักงานกดบันทึกส่งน้ำ ยอดในสต๊อกนี้จะถูกหักออกอัตโนมัติ</p>
-              <div class="space-y-3">
-                ${['orange', 'purple', 'crate'].map(item => `
-                  <div class="flex justify-between items-center p-3.5 rounded-2xl border ${item==='orange'?'bg-orange-50 border-orange-100':item==='purple'?'bg-purple-50 border-purple-100':'bg-amber-50 border-amber-100'}">
-                    <div class="flex items-center font-black text-sm ${item==='orange'?'text-orange-700':item==='purple'?'text-purple-700':'text-amber-800'}">
-                      <i data-lucide="${item==='crate'?'package':'droplet'}" class="w-5 h-5 mr-2"></i> ${item==='orange'?'ถังส้ม':item==='purple'?'ถังม่วง':'แบบลัง'}
-                    </div>
-                    <div class="flex items-center gap-1 bg-white p-1 rounded-full shadow-sm border border-gray-100">
-                      <button onclick="window.updateGlobalStock('${item}', -1)" class="w-9 h-9 rounded-full bg-gray-50 flex items-center justify-center text-gray-600 active:scale-90 transition-all shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
-                      <input type="text" inputmode="numeric" pattern="[0-9]*" id="global-stock-${item}" value="${window.globalStock[item] || 0}" onchange="window.setGlobalStock('${item}', this.value)" onfocus="this.select()" class="w-12 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
-                      <button onclick="window.updateGlobalStock('${item}', 1)" class="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-800 active:scale-90 transition-all shrink-0"><i data-lucide="plus" class="w-4 h-4"></i></button>
-                    </div>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
-
-            <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
-              <h3 class="font-black text-gray-800 mb-4 flex items-center text-base"><i data-lucide="users" class="w-5 h-5 mr-2 text-indigo-600"></i> จัดการพนักงาน</h3>
-              
-              <form onsubmit="window.saveStaff(event)" class="mb-5 bg-indigo-50 p-4 rounded-2xl border ${window.editingUserId ? 'border-indigo-400 shadow-md' : 'border-indigo-100'} transition-all">
-                <div class="flex justify-between items-center mb-3">
-                  <h4 class="text-xs font-black text-indigo-800">${window.editingUserId ? 'แก้ไขข้อมูลพนักงาน' : 'เพิ่มพนักงานใหม่'}</h4>
-                  ${window.editingUserId ? `<button type="button" onclick="window.cancelEditStaff()" class="text-[10px] text-red-600 font-bold bg-white px-2.5 py-1 rounded-lg active:scale-90 transition-all border border-red-100 shadow-sm">ยกเลิกแก้ไข</button>` : ''}
-                </div>
-                <div class="grid grid-cols-2 gap-2 mb-2">
-                  <input type="text" id="staff-name-input" value="${window.newUserName}" oninput="window.newUserName=this.value;" placeholder="ชื่อพนักงาน" class="px-4 py-3 rounded-xl border border-white focus:outline-none focus:ring-2 focus:ring-indigo-300 text-sm font-bold shadow-sm outline-none transition-all" required>
-                  <input type="password" id="staff-pin-input" pattern="[0-9]*" inputmode="numeric" value="${window.newUserPin}" oninput="window.newUserPin=this.value;" placeholder="PIN 4 หลัก" class="px-4 py-3 rounded-xl border border-white focus:outline-none focus:ring-2 focus:ring-indigo-300 text-sm font-bold shadow-sm text-center tracking-[0.3em] outline-none transition-all" required>
-                </div>
+          <!-- 💻 แบ่ง 2 คอลัมน์บน Desktop -->
+          <div class="px-4 md:px-6 md:grid md:grid-cols-2 md:gap-6 md:items-start">
+            
+            <div class="space-y-4">
+              <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+                <h3 class="font-black text-gray-800 mb-4 flex items-center text-base"><i data-lucide="qr-code" class="w-5 h-5 mr-2 text-indigo-600"></i> ตั้งค่าพร้อมเพย์รับเงิน</h3>
                 <div class="flex gap-2">
-                  <select id="staff-role-input" onchange="window.newUserRole=this.value; window.render();" class="flex-1 px-4 py-3 rounded-xl border border-white text-sm font-bold shadow-sm text-gray-600 bg-white outline-none transition-all">
-                    <option value="staff" ${window.newUserRole==='staff'?'selected':''}>พนักงาน (Staff)</option>
-                    <option value="admin" ${window.newUserRole==='admin'?'selected':''}>แอดมิน (Admin)</option>
-                  </select>
-                  <button type="submit" class="bg-indigo-600 text-white px-5 py-3 rounded-xl font-black text-sm shadow-md shadow-indigo-600/30 active:scale-95 w-24 flex justify-center items-center transition-all">${window.editingUserId ? 'บันทึก' : 'เพิ่ม'}</button>
+                  <input type="text" id="promptpay-input" value="${window.globalStock.promptpayNumber || ''}" placeholder="เบอร์โทร (10 หลัก) หรือ ปชช. (13 หลัก)" class="flex-1 px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold bg-gray-50 outline-none transition-all">
+                  <button onclick="window.savePromptPay()" class="bg-indigo-600 text-white px-5 py-3 rounded-xl font-black text-sm shadow-md shadow-indigo-600/30 active:scale-95 transition-all flex justify-center items-center hover:bg-indigo-700">บันทึก</button>
                 </div>
-              </form>
+                <p class="text-[10px] font-bold text-gray-400 mt-3 bg-gray-50 p-2 rounded-lg border border-gray-100">* ใช้สร้าง QR Code ให้ลูกค้าสแกนจ่ายอัตโนมัติตามยอดบิล</p>
+              </div>
 
-              <div class="space-y-2">
-                <div class="flex justify-between items-center py-3 px-4 bg-red-50 rounded-2xl border border-red-100">
-                  <div>
-                    <span class="font-black text-red-900 text-[13px]">👑 ผู้ดูแลระบบสูงสุด</span>
-                  </div>
-                  <span class="text-[10px] font-mono font-bold text-gray-400 border border-gray-200 bg-white px-2 py-1 rounded-lg">PIN: ****</span>
+              <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+                <div class="flex justify-between items-center mb-4">
+                  <h3 class="font-black text-gray-800 flex items-center text-base"><i data-lucide="package-check" class="w-5 h-5 mr-2 text-blue-600"></i> สต๊อกพร้อมขาย (กลาง)</h3>
                 </div>
-
-                ${window.users.map(u => `
-                  <div class="flex justify-between items-center py-2.5 px-4 bg-gray-50 rounded-2xl border ${window.editingUserId === u.id ? 'border-indigo-400 bg-indigo-50 shadow-sm scale-[1.02]' : 'border-gray-100'} transition-all">
-                    <div>
-                      <span class="font-black text-gray-800 text-[13px]">${u.name}</span>
-                      <span class="text-[9px] ml-2 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider ${u.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-blue-100 text-blue-600'}">${u.role === 'admin' ? 'Admin' : 'Staff'}</span>
+                <p class="text-[10px] font-bold text-blue-600 mb-4 leading-tight bg-blue-50 p-2.5 rounded-lg border border-blue-100">* เมื่อพนักงานกดบันทึกส่งน้ำ ยอดในสต๊อกนี้จะถูกหักออกอัตโนมัติ</p>
+                <div class="space-y-3">
+                  ${['orange', 'purple', 'crate'].map(item => `
+                    <div class="flex justify-between items-center p-3.5 rounded-2xl border ${item==='orange'?'bg-orange-50 border-orange-100':item==='purple'?'bg-purple-50 border-purple-100':'bg-amber-50 border-amber-100'} hover:shadow-sm transition-all">
+                      <div class="flex items-center font-black text-sm ${item==='orange'?'text-orange-700':item==='purple'?'text-purple-700':'text-amber-800'}">
+                        <i data-lucide="${item==='crate'?'package':'droplet'}" class="w-5 h-5 mr-2"></i> ${item==='orange'?'ถังส้ม':item==='purple'?'ถังม่วง':'แบบลัง'}
+                      </div>
+                      <div class="flex items-center gap-1 bg-white p-1 rounded-full shadow-sm border border-gray-100">
+                        <button onclick="window.updateGlobalStock('${item}', -1)" class="w-9 h-9 rounded-full bg-gray-50 flex items-center justify-center text-gray-600 active:scale-90 transition-all shrink-0 hover:bg-gray-100"><i data-lucide="minus" class="w-4 h-4"></i></button>
+                        <input type="text" inputmode="numeric" pattern="[0-9]*" id="global-stock-${item}" value="${window.globalStock[item] || 0}" onchange="window.setGlobalStock('${item}', this.value)" onfocus="this.select()" class="w-12 text-center font-black text-xl text-gray-800 bg-transparent border-none p-0 focus:ring-0 outline-none" />
+                        <button onclick="window.updateGlobalStock('${item}', 1)" class="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-800 active:scale-90 transition-all shrink-0 hover:bg-gray-300"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                      </div>
                     </div>
-                    <div class="flex items-center gap-2">
-                      <span class="text-[10px] font-mono font-bold text-gray-500 mr-1 border border-gray-200 bg-white px-2 py-1 rounded-lg">PIN: ${u.role === 'admin' && window.currentUser.role !== 'super_admin' ? '****' : u.pin}</span>
-                      <button onclick="window.editStaff('${u.id}')" class="p-2 bg-white text-blue-600 rounded-xl shadow-sm border border-gray-200 active:scale-90 transition-all"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i></button>
-                      <button onclick="window.deleteStaff('${u.id}')" class="p-2 bg-white text-red-600 rounded-xl shadow-sm border border-gray-200 active:scale-90 transition-all"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
-                    </div>
-                  </div>
-                `).join('')}
+                  `).join('')}
+                </div>
               </div>
             </div>
 
-            ${window.currentUser.role === 'super_admin' ? `
-            <div class="bg-white p-5 rounded-3xl shadow-sm border border-red-100">
-              <h3 class="font-black text-red-700 mb-3 flex items-center text-base"><i data-lucide="alert-triangle" class="w-5 h-5 mr-2"></i> โซนล้างข้อมูล</h3>
-              <p class="text-xs text-gray-500 mb-5 font-bold leading-relaxed bg-red-50 p-3 rounded-xl border border-red-100">ระบบจะทำการลบประวัติบิลทั้งหมดในอดีตอย่างถาวร เพื่อเคลียร์พื้นที่ <br><span class="text-red-600">*(ยอดค้างชำระปัจจุบัน และรายชื่อลูกค้า จะไม่หายไป)*</span></p>
-              <button onclick="window.clearAllTransactions()" class="w-full bg-red-600 text-white font-black py-4 rounded-2xl shadow-md shadow-red-600/30 active:scale-95 transition-all text-sm flex justify-center items-center"><i data-lucide="trash-2" class="w-4 h-4 mr-2"></i> ล้างประวัติบิลทั้งหมด</button>
+            <div class="space-y-4 mt-4 md:mt-0">
+              <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+                <h3 class="font-black text-gray-800 mb-4 flex items-center text-base"><i data-lucide="users" class="w-5 h-5 mr-2 text-indigo-600"></i> จัดการพนักงาน</h3>
+                
+                <div class="mb-5 bg-indigo-50 p-5 rounded-[1.5rem] border ${window.editingUserId ? 'border-indigo-400 shadow-md' : 'border-indigo-100'} transition-all">
+                  <div class="flex justify-between items-center mb-3">
+                    <h4 class="text-xs font-black text-indigo-800 flex items-center"><i data-lucide="user-plus" class="w-4 h-4 mr-1.5"></i> ${window.editingUserId ? 'แก้ไขข้อมูลพนักงาน' : 'เพิ่มพนักงานใหม่'}</h4>
+                    ${window.editingUserId ? `<button type="button" onclick="window.cancelEditStaff()" class="text-[10px] text-red-600 font-bold bg-white px-2.5 py-1 rounded-lg active:scale-90 transition-all border border-red-100 shadow-sm hover:bg-red-50">ยกเลิกแก้ไข</button>` : ''}
+                  </div>
+                  <div class="grid grid-cols-2 gap-2 mb-3">
+                    <input type="text" id="staff-name-input" value="${window.newUserName}" oninput="window.newUserName=this.value;" placeholder="ชื่อพนักงาน" class="px-4 py-3 rounded-xl border border-white focus:outline-none focus:ring-2 focus:ring-indigo-300 text-sm font-bold shadow-sm outline-none transition-all hover:border-indigo-200" required>
+                    <input type="password" id="staff-pin-input" pattern="[0-9]*" inputmode="numeric" value="${window.newUserPin}" oninput="window.newUserPin=this.value;" placeholder="PIN 4 หลัก" class="px-4 py-3 rounded-xl border border-white focus:outline-none focus:ring-2 focus:ring-indigo-300 text-sm font-bold shadow-sm text-center tracking-[0.3em] outline-none transition-all hover:border-indigo-200" required>
+                  </div>
+                  <div class="flex gap-2">
+                    <select id="staff-role-input" onchange="window.newUserRole=this.value; window.render();" class="flex-1 px-4 py-3 rounded-xl border border-white text-sm font-bold shadow-sm text-gray-600 bg-white outline-none transition-all hover:border-indigo-200 cursor-pointer">
+                      <option value="staff" ${window.newUserRole==='staff'?'selected':''}>พนักงาน (Staff)</option>
+                      <option value="admin" ${window.newUserRole==='admin'?'selected':''}>แอดมิน (Admin)</option>
+                    </select>
+                    <button type="button" id="btn-save-staff" onclick="window.saveStaff()" class="bg-indigo-600 text-white px-5 py-3 rounded-xl font-black text-sm shadow-md shadow-indigo-600/30 active:scale-95 w-24 flex justify-center items-center transition-all hover:bg-indigo-700">${window.editingUserId ? 'บันทึก' : 'เพิ่ม'}</button>
+                  </div>
+                </div>
+
+                <div class="space-y-2 max-h-[25rem] overflow-y-auto pr-1 no-scrollbar pb-2">
+                  <div class="flex justify-between items-center py-3 px-4 bg-red-50 rounded-2xl border border-red-100 shadow-sm">
+                    <div>
+                      <span class="font-black text-red-900 text-[13px]">👑 ผู้ดูแลระบบสูงสุด</span>
+                    </div>
+                    <span class="text-[10px] font-mono font-bold text-gray-400 border border-gray-200 bg-white px-2 py-1 rounded-lg">PIN: ****</span>
+                  </div>
+
+                  ${window.users.map(u => `
+                    <div class="flex justify-between items-center py-2.5 px-4 bg-gray-50 rounded-2xl border ${window.editingUserId === u.id ? 'border-indigo-400 bg-indigo-50 shadow-sm scale-[1.02]' : 'border-gray-100'} transition-all hover:border-gray-300">
+                      <div>
+                        <span class="font-black text-gray-800 text-[13px]">${u.name}</span>
+                        <span class="text-[9px] ml-2 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider ${u.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-blue-100 text-blue-600'}">${u.role === 'admin' ? 'Admin' : 'Staff'}</span>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <span class="text-[10px] font-mono font-bold text-gray-500 mr-1 border border-gray-200 bg-white px-2 py-1 rounded-lg shadow-sm">PIN: ${u.role === 'admin' && window.currentUser.role !== 'super_admin' ? '****' : u.pin}</span>
+                        <button onclick="window.editStaff('${u.id}')" class="p-2 bg-white text-blue-600 rounded-xl shadow-sm border border-gray-200 active:scale-90 transition-all hover:bg-blue-50"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i></button>
+                        <button onclick="window.deleteStaff('${u.id}')" class="p-2 bg-white text-red-600 rounded-xl shadow-sm border border-gray-200 active:scale-90 transition-all hover:bg-red-50"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+
+              ${window.currentUser.role === 'super_admin' ? `
+              <div class="bg-white p-5 rounded-3xl shadow-sm border border-red-100">
+                <h3 class="font-black text-red-700 mb-3 flex items-center text-base"><i data-lucide="alert-triangle" class="w-5 h-5 mr-2"></i> โซนล้างข้อมูล</h3>
+                <p class="text-xs text-gray-500 mb-5 font-bold leading-relaxed bg-red-50 p-4 rounded-xl border border-red-100">ระบบจะทำการลบประวัติบิลทั้งหมดในอดีตอย่างถาวร เพื่อเคลียร์พื้นที่ <br><span class="text-red-600">*(ยอดค้างชำระปัจจุบัน และรายชื่อลูกค้า จะไม่หายไป)*</span></p>
+                <button onclick="window.clearAllTransactions()" class="w-full bg-red-600 text-white font-black py-4 rounded-2xl shadow-md shadow-red-600/30 active:scale-95 transition-all text-sm flex justify-center items-center hover:bg-red-700"><i data-lucide="trash-2" class="w-4 h-4 mr-2"></i> ล้างประวัติบิลทั้งหมด</button>
+              </div>
+              ` : ''}
             </div>
-            ` : ''}
+
           </div>
         </div>
       `;
