@@ -13,17 +13,13 @@
   <meta name="apple-mobile-web-app-title" content="ระบบน้ำดื่ม">
 
   <script>
-    // สคริปต์วาดไอคอน PNG และสร้าง Manifest อัตโนมัติ 
+    // สคริปต์วาดไอคอน PNG และสร้าง Manifest อัตโนมัติ
     (function() {
       const canvas = document.createElement('canvas');
       canvas.width = 512; canvas.height = 512;
       const ctx = canvas.getContext('2d');
-      
-      // ถมพื้นหลังเป็นสีฟ้าเต็มพื้นที่ (เนียนไปกับพื้นหลังตอนโหลด)
       ctx.fillStyle = '#2563eb';
       ctx.fillRect(0, 0, 512, 512); 
-      
-      // วาดหยดน้ำสีขาวตรงกลาง
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
       ctx.moveTo(256, 100);
@@ -37,7 +33,7 @@
         short_name: "ระบบน้ำดื่ม",
         start_url: window.location.pathname,
         display: "standalone",
-        background_color: "#2563eb", // เปลี่ยนพื้นหลัง Splash Screen เป็นสีฟ้า!
+        background_color: "#2563eb",
         theme_color: "#2563eb",
         icons: [{ src: iconUrl, sizes: "512x512", type: "image/png", purpose: "any maskable" }]
       };
@@ -83,22 +79,16 @@
 </head>
 <body class="bg-gray-100 font-sans text-gray-900 min-h-screen relative pb-20 selection:bg-blue-200">
 
-  <!-- หน้าจอโหลดเข้าแอปแบบแอนิเมชันสุดพรีเมียม -->
+  <!-- หน้าจอโหลดเข้าแอปแบบแอนิเมชัน -->
   <div id="loading-screen" class="fixed inset-0 bg-blue-600 z-[70] flex flex-col items-center justify-center transition-all duration-700 ease-in-out opacity-100 scale-100">
     <div class="relative flex items-center justify-center mb-8 -mt-10">
-      <!-- เอฟเฟกต์คลื่นน้ำกระจายตัว -->
       <div class="absolute w-28 h-28 bg-white/20 rounded-full animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite]"></div>
       <div class="absolute w-36 h-36 bg-white/10 rounded-full animate-[ping_2.5s_cubic-bezier(0,0,0.2,1)_infinite]" style="animation-delay: 0.5s"></div>
-      
-      <!-- โลโก้หยดน้ำเด้ง -->
       <div class="relative z-10 w-24 h-24 bg-white rounded-[2rem] flex items-center justify-center shadow-2xl animate-bounce">
         <i data-lucide="droplet" class="w-12 h-12 text-blue-600"></i>
       </div>
     </div>
-    
     <h1 class="text-white text-2xl font-black tracking-tight mb-4 drop-shadow-md">ระบบน้ำดื่ม แม่จว้า</h1>
-    
-    <!-- แถบโหลดแบบแคปซูลใส -->
     <div class="flex items-center text-blue-100 text-sm font-bold bg-black/15 px-5 py-2.5 rounded-full backdrop-blur-md border border-white/10 shadow-inner">
       <svg class="animate-spin -ml-1 mr-2.5 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -123,8 +113,8 @@
       <h3 id="modal-title" class="font-bold text-xl mb-2 text-gray-800"></h3>
       <p id="modal-msg" class="text-gray-600 mb-6 leading-relaxed text-sm"></p>
       <div class="flex gap-3">
-        <button onclick="window.vibrate(30); window.closeModal()" class="flex-1 bg-gray-100 text-gray-700 py-3.5 rounded-xl font-bold active:bg-gray-200 transition-colors">ยกเลิก</button>
-        <button id="modal-confirm-btn" class="flex-1 text-white py-3.5 rounded-xl font-bold active:scale-95 transition-transform bg-blue-600 flex justify-center items-center">
+        <button onclick="window.vibrate(30); window.closeModal()" class="flex-1 bg-gray-100 text-gray-700 py-3.5 rounded-xl font-bold active:bg-gray-200 active:scale-95 transition-all">ยกเลิก</button>
+        <button id="modal-confirm-btn" class="flex-1 text-white py-3.5 rounded-xl font-bold active:scale-95 transition-all bg-blue-600 flex justify-center items-center">
           <span id="modal-btn-text">ยืนยัน</span>
           <div id="modal-spinner" class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin hidden ml-2"></div>
         </button>
@@ -134,7 +124,8 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, increment, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    // เปลี่ยนมานำเข้าฟังก์ชันสำหรับเก็บข้อมูลออฟไลน์ (Offline Persistence)
+    import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, increment, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyADKt7-BEYafDN7gx16CCnMah_BKV-GJmQ",
@@ -146,7 +137,10 @@
     };
 
     const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+    // เปิดระบบ Offline Mode ให้แอปทำงานต่อได้แม้เน็ตหลุด
+    const db = initializeFirestore(app, {
+      localCache: persistentLocalCache({tabManager: persistentMultipleTabManager()})
+    });
 
     const SUPER_ADMIN_ACCOUNT = { id: 'super_admin_fixed_id', name: 'ผู้ดูแลระบบสูงสุด', pin: '1617', role: 'super_admin' };
 
@@ -161,6 +155,7 @@
     window.searchQuery = '';
     window.selectedCustomerId = null;
 
+    // Report States
     window.reportMode = 'daily'; 
     const initD = new Date();
     const dStr = initD.getFullYear() + '-' + String(initD.getMonth()+1).padStart(2,'0') + '-' + String(initD.getDate()).padStart(2,'0');
@@ -172,6 +167,7 @@
     window.exportStartDate = mStr;
     window.exportEndDate = dStr;
 
+    // Delivery States
     window.deliveries = { orange: 0, purple: 0, crate: 0 };
     window.returns = { orange: 0, purple: 0, crate: 0 };
     window.ownTakeWash = 0; 
@@ -198,6 +194,7 @@
     let loaded = { cust: false, tx: false, users: false, stock: false };
     let isAppInitialized = false;
 
+    // ฟังก์ชันสั่งมือถือสั่น (Haptic Feedback)
     window.vibrate = function(pattern = 30) {
       if (navigator.vibrate) {
         navigator.vibrate(pattern);
@@ -225,7 +222,6 @@
       if (loaded.cust && loaded.tx && loaded.users && loaded.stock) {
         const loader = document.getElementById('loading-screen');
         if (loader && !loader.classList.contains('hidden')) {
-          // หน่วงเวลาให้แอนิเมชันโชว์ความสวยงามนิดนึงก่อนเฟดออก (เพื่อความสมูท)
           setTimeout(() => {
             loader.style.opacity = '0';
             loader.style.transform = 'scale(1.05)';
@@ -855,18 +851,24 @@
 
       lucide.createIcons();
 
+      // สคริปต์ช่วยเลื่อนแถบโซนให้อยู่ตรงกลางจออัตโนมัติ
       setTimeout(() => {
-        const nzc = document.getElementById('zone-scroll-container');
-        if (nzc && window.lastZoneScroll !== undefined) nzc.scrollLeft = window.lastZoneScroll;
-      }, 0);
-
-      if (activeId) {
-        const el = document.getElementById(activeId);
-        if (el) {
-          el.focus();
-          try { if (cursorStart !== null && cursorEnd !== null) el.setSelectionRange(cursorStart, cursorEnd); } catch(e) {}
+        const activeTab = document.getElementById('selected-zone-tab');
+        if (activeTab) {
+          activeTab.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+        } else {
+          const nzc = document.getElementById('zone-scroll-container');
+          if (nzc && window.lastZoneScroll !== undefined) nzc.scrollLeft = window.lastZoneScroll;
         }
-      }
+
+        if (activeId) {
+          const el = document.getElementById(activeId);
+          if (el) {
+            el.focus();
+            try { if (cursorStart !== null && cursorEnd !== null) el.setSelectionRange(cursorStart, cursorEnd); } catch(e) {}
+          }
+        }
+      }, 50);
     };
 
     function renderLogin(container) {
@@ -919,7 +921,7 @@
             <div class="relative">
               <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i data-lucide="search" class="w-4 h-4 text-gray-400"></i></div>
               <input type="text" id="search-list-input" value="${window.searchQuery}" oninput="window.searchQuery=this.value; window.render();" placeholder="ค้นหาชื่อ, โซน หรือเบอร์โทร..." class="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm transition-all" />
-              ${window.searchQuery ? `<button onclick="window.vibrate(20); window.searchQuery=''; window.render();" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 active:scale-90"><i data-lucide="x-circle" class="w-5 h-5"></i></button>` : ''}
+              ${window.searchQuery ? `<button onclick="window.vibrate(20); window.searchQuery=''; window.render();" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 active:scale-90 transition-all"><i data-lucide="x-circle" class="w-5 h-5"></i></button>` : ''}
             </div>
           </div>
 
@@ -931,12 +933,12 @@
 
             ${!window.searchQuery && uniqueZones.length > 1 ? `
             <div id="zone-scroll-container" class="flex overflow-x-auto gap-2 mb-5 pb-1 -mx-4 px-4 no-scrollbar scroll-smooth">
-              ${uniqueZones.map(z => `<button onclick="window.vibrate(20); window.selectedZone='${z}'; window.render();" class="px-4 py-2 rounded-full text-[13px] font-bold whitespace-nowrap transition-all shrink-0 ${window.selectedZone === z ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-gray-500 border border-gray-200 active:bg-gray-50'}">${z}</button>`).join('')}
+              ${uniqueZones.map(z => `<button id="${window.selectedZone === z ? 'selected-zone-tab' : ''}" onclick="window.vibrate(20); window.selectedZone='${z}'; window.render();" class="px-4 py-2 rounded-full text-[13px] font-bold whitespace-nowrap transition-all shrink-0 active:scale-95 ${window.selectedZone === z ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-gray-500 border border-gray-200 active:bg-gray-50'}">${z}</button>`).join('')}
             </div>` : ''}
 
             <div class="space-y-3">
               ${filtered.length === 0 ? `<div class="text-center py-12 bg-white rounded-3xl border border-gray-100 shadow-sm"><i data-lucide="users" class="w-12 h-12 mx-auto text-gray-200 mb-3"></i><p class="text-gray-400 font-bold text-sm">ไม่มีรายชื่อลูกค้าในหมวดนี้</p></div>` : filtered.map(cust => `
-                <div onclick="window.goToDelivery('${cust.id}')" class="bg-white p-4 rounded-2xl shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-gray-100 flex justify-between items-center active:scale-[0.97] transition-all cursor-pointer relative overflow-hidden">
+                <div onclick="window.goToDelivery('${cust.id}')" class="bg-white p-4 rounded-2xl shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-gray-100 flex justify-between items-center active:scale-95 transition-all cursor-pointer relative overflow-hidden">
                   ${safeNum(cust.debt) > 0 ? `<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-red-500"></div>` : ''}
                   <div class="pl-2 w-full">
                     <h3 class="font-black text-base text-gray-800 flex items-center">${cust.name}</h3>
@@ -1152,8 +1154,8 @@
               </h3>
               
               <div class="flex gap-2 mb-4 bg-indigo-50 p-1.5 rounded-xl border border-indigo-100/50">
-                <button onclick="window.vibrate(20); window.ownBottlePayMode='pay_now'; window.render();" class="flex-1 py-2 text-[11px] font-black rounded-lg transition-all ${window.ownBottlePayMode === 'pay_now' ? 'bg-white text-indigo-700 shadow-sm' : 'text-indigo-400 active:bg-indigo-100/50'}">โหมดรับถัง (จ่ายเลย)</button>
-                <button onclick="window.vibrate(20); window.ownBottlePayMode='pay_later'; window.render();" class="flex-1 py-2 text-[11px] font-black rounded-lg transition-all ${window.ownBottlePayMode === 'pay_later' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-indigo-600'}">โหมดส่งคืน (ค่อยจ่าย)</button>
+                <button onclick="window.vibrate(20); window.ownBottlePayMode='pay_now'; window.render();" class="flex-1 py-2 text-[11px] font-black rounded-lg transition-all active:scale-95 ${window.ownBottlePayMode === 'pay_now' ? 'bg-white text-indigo-700 shadow-sm' : 'text-indigo-400 active:bg-indigo-100/50'}">โหมดรับถัง (จ่ายเลย)</button>
+                <button onclick="window.vibrate(20); window.ownBottlePayMode='pay_later'; window.render();" class="flex-1 py-2 text-[11px] font-black rounded-lg transition-all active:scale-95 ${window.ownBottlePayMode === 'pay_later' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-indigo-600'}">โหมดส่งคืน (ค่อยจ่าย)</button>
               </div>
 
               ${window.ownBottlePayMode === 'pay_now' ? `
@@ -1174,7 +1176,7 @@
                   </div>
                 </div>
                 <div class="flex justify-between items-center py-2.5 bg-gray-50 -mx-5 px-5 pb-4 mt-3 rounded-b-[1.5rem] border-t border-gray-100">
-                  <span class="font-bold text-gray-600 text-[13px]"><i data-lucide="corner-up-left" class="w-3.5 h-3.5 inline mr-1 text-gray-400"></i>ส่งคืนถังลูกค้า (ทำเสร็จแล้ว)</span>
+                  <span class="font-bold text-gray-600 text-[13px]"><i data-lucide="corner-up-left" class="w-3.5 h-3.5 inline mr-1 text-gray-400"></i>ส่งคืนลูกค้า (ทำเสร็จแล้ว)</span>
                   <div class="flex items-center gap-1 bg-white p-1 rounded-full border border-gray-200">
                     <button onclick="window.updateOwnQty('ownDeliverDone', -1)" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 active:scale-90 transition-transform shrink-0"><i data-lucide="minus" class="w-4 h-4"></i></button>
                     <input type="text" inputmode="numeric" pattern="[0-9]*" id="own-deliver-done-input" value="${window.ownDeliverDone}" onchange="window.setOwnQty('ownDeliverDone', this.value)" onfocus="this.select()" class="w-10 text-center font-black text-xl text-gray-700 bg-transparent border-none p-0 focus:ring-0 outline-none" />
@@ -1247,8 +1249,8 @@
               ${window.paymentStatus === 'paid' && totalToCollect > 0 ? `
                 <div class="mt-5 pt-5 border-t border-gray-100">
                   <div class="flex gap-2 mb-4 bg-gray-50 p-1.5 rounded-xl border border-gray-100">
-                    <button onclick="window.vibrate(20); window.paymentMethod='cash'; window.render();" class="flex-1 py-2 text-xs font-black rounded-lg transition-all flex justify-center items-center ${window.paymentMethod === 'cash' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-400 active:bg-gray-200'}"><i data-lucide="banknote" class="w-4 h-4 mr-1"></i> เงินสด</button>
-                    <button onclick="window.vibrate(20); window.paymentMethod='qr'; window.render();" class="flex-1 py-2 text-xs font-black rounded-lg transition-all flex justify-center items-center ${window.paymentMethod === 'qr' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-400 active:bg-gray-200'}"><i data-lucide="qr-code" class="w-4 h-4 mr-1"></i> โอนผ่าน QR</button>
+                    <button onclick="window.vibrate(20); window.paymentMethod='cash'; window.render();" class="flex-1 py-2 text-xs font-black rounded-lg transition-all active:scale-95 flex justify-center items-center ${window.paymentMethod === 'cash' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-400 active:bg-gray-200'}"><i data-lucide="banknote" class="w-4 h-4 mr-1"></i> เงินสด</button>
+                    <button onclick="window.vibrate(20); window.paymentMethod='qr'; window.render();" class="flex-1 py-2 text-xs font-black rounded-lg transition-all active:scale-95 flex justify-center items-center ${window.paymentMethod === 'qr' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-400 active:bg-gray-200'}"><i data-lucide="qr-code" class="w-4 h-4 mr-1"></i> โอนผ่าน QR</button>
                   </div>
 
                   ${window.paymentMethod === 'cash' ? `
@@ -1259,10 +1261,10 @@
                     <div class="mb-3">
                       <input type="text" inputmode="numeric" pattern="[0-9]*" id="cash-received-input" placeholder="พิมพ์จำนวนเงินที่รับมา..." value="${window.cashReceived}" oninput="window.cashReceived=this.value ? safeNum(this.value) : ''; window.render();" class="w-full px-4 py-3.5 text-xl font-black rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 outline-none bg-gray-50 focus:bg-white text-center mb-2 transition-all shadow-inner" />
                       <div class="grid grid-cols-4 gap-2">
-                        <button type="button" onclick="window.vibrate(15); window.cashReceived=${totalToCollect}; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-emerald-50 active:text-emerald-700 active:border-emerald-200 transition-all shadow-sm">พอดี</button>
-                        <button type="button" onclick="window.vibrate(15); window.cashReceived=100; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-emerald-50 active:text-emerald-700 active:border-emerald-200 transition-all shadow-sm">100</button>
-                        <button type="button" onclick="window.vibrate(15); window.cashReceived=500; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-emerald-50 active:text-emerald-700 active:border-emerald-200 transition-all shadow-sm">500</button>
-                        <button type="button" onclick="window.vibrate(15); window.cashReceived=1000; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-emerald-50 active:text-emerald-700 active:border-emerald-200 transition-all shadow-sm">1,000</button>
+                        <button type="button" onclick="window.vibrate(15); window.cashReceived=${totalToCollect}; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-emerald-50 active:text-emerald-700 active:border-emerald-200 active:scale-95 transition-all shadow-sm">พอดี</button>
+                        <button type="button" onclick="window.vibrate(15); window.cashReceived=100; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-emerald-50 active:text-emerald-700 active:border-emerald-200 active:scale-95 transition-all shadow-sm">100</button>
+                        <button type="button" onclick="window.vibrate(15); window.cashReceived=500; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-emerald-50 active:text-emerald-700 active:border-emerald-200 active:scale-95 transition-all shadow-sm">500</button>
+                        <button type="button" onclick="window.vibrate(15); window.cashReceived=1000; window.render();" class="py-2.5 text-xs font-bold rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-emerald-50 active:text-emerald-700 active:border-emerald-200 active:scale-95 transition-all shadow-sm">1,000</button>
                       </div>
                     </div>
                     ${window.cashReceived !== '' ? `
@@ -1357,7 +1359,7 @@
       else moneyStr = `<span class="text-red-500">ค้าง ${safeNum(tx.addedDebt)} ฿</span>`;
 
       return `
-        <div class="p-4 rounded-[1.5rem] shadow-sm border transition-all ${tx.status === 'voided' ? 'bg-gray-100/50 border-gray-200 opacity-60 grayscale-[50%]' : 'bg-white border-gray-100'}">
+        <div class="p-4 rounded-[1.5rem] shadow-sm border transition-all ${tx.status === 'voided' ? 'bg-gray-100/50 border-gray-200 opacity-60 grayscale-[50%]' : 'bg-white border-gray-100 hover:shadow-md'}">
           <div class="flex justify-between items-start mb-3 border-b border-gray-100 pb-3">
             <div>
               ${showCustomerName ? `<h4 class="font-black text-blue-900 mb-1 flex items-center text-sm"><i data-lucide="user" class="w-3.5 h-3.5 mr-1.5 text-blue-500"></i> ${tx.customerName}</h4>` : ''}
@@ -1468,12 +1470,12 @@
 
         reportHtml = `
           ${window.reportMode === 'daily' ? `
-            <div class="mb-5 bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex items-center">
+            <div class="mb-5 bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex items-center transition-all">
               <label class="text-xs font-bold text-gray-500 mr-3 w-16">เลือกวันที่:</label>
               <input type="date" value="${window.reportDailyDate}" onchange="window.reportDailyDate=this.value; window.render();" class="flex-1 px-4 py-2 text-sm font-bold rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 bg-gray-50 outline-none transition-all" />
             </div>
           ` : `
-            <div class="mb-5 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+            <div class="mb-5 bg-white p-4 rounded-2xl shadow-sm border border-gray-100 transition-all">
               <div class="flex items-center mb-2">
                 <label class="text-[10px] font-bold text-gray-400 w-12">ตั้งแต่:</label>
                 <input type="date" value="${window.reportCustomStart}" onchange="window.reportCustomStart=this.value; window.render();" class="flex-1 px-3 py-1.5 text-sm font-bold rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 bg-gray-50 outline-none transition-all" />
@@ -1486,19 +1488,19 @@
           `}
 
           <div class="grid grid-cols-2 gap-3 mb-5">
-            <div class="bg-white p-4 rounded-[1.5rem] shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-emerald-50 flex flex-col justify-center items-center text-center">
+            <div class="bg-white p-4 rounded-[1.5rem] shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-emerald-50 flex flex-col justify-center items-center text-center transition-all hover:shadow-md">
               <span class="text-gray-500 text-[10px] font-black mb-1 flex items-center uppercase tracking-wider"><i data-lucide="banknote" class="w-3.5 h-3.5 mr-1 text-emerald-500"></i> รับเงินสด</span>
               <span class="text-2xl font-black text-emerald-600">${stats.cashRev.toLocaleString()}</span>
             </div>
-            <div class="bg-white p-4 rounded-[1.5rem] shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-blue-50 flex flex-col justify-center items-center text-center">
+            <div class="bg-white p-4 rounded-[1.5rem] shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-blue-50 flex flex-col justify-center items-center text-center transition-all hover:shadow-md">
               <span class="text-gray-500 text-[10px] font-black mb-1 flex items-center uppercase tracking-wider"><i data-lucide="qr-code" class="w-3.5 h-3.5 mr-1 text-blue-500"></i> โอน (QR)</span>
               <span class="text-2xl font-black text-blue-600">${stats.qrRev.toLocaleString()}</span>
             </div>
-            <div class="bg-white p-4 rounded-[1.5rem] shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-red-50 flex flex-col justify-center items-center text-center">
+            <div class="bg-white p-4 rounded-[1.5rem] shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-red-50 flex flex-col justify-center items-center text-center transition-all hover:shadow-md">
               <span class="text-gray-500 text-[10px] font-black mb-1 flex items-center uppercase tracking-wider"><i data-lucide="alert-circle" class="w-3.5 h-3.5 mr-1 text-red-500"></i> ค้างจ่ายเพิ่ม</span>
               <span class="text-2xl font-black text-red-500">${stats.debt.toLocaleString()}</span>
             </div>
-            <div class="bg-white p-4 rounded-[1.5rem] shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-pink-50 flex flex-col justify-center items-center text-center">
+            <div class="bg-white p-4 rounded-[1.5rem] shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-pink-50 flex flex-col justify-center items-center text-center transition-all hover:shadow-md">
               <span class="text-gray-500 text-[10px] font-black mb-1 flex items-center uppercase tracking-wider"><i data-lucide="gift" class="w-3.5 h-3.5 mr-1 text-pink-500"></i> สนับสนุน</span>
               <span class="text-2xl font-black text-pink-500">${stats.support.toLocaleString()}</span>
             </div>
@@ -1634,10 +1636,10 @@
 
             <h3 class="text-sm font-black text-gray-800 mb-3 ml-1 flex items-center"><i data-lucide="bar-chart-2" class="w-4 h-4 mr-1 text-blue-500"></i> สรุปยอดขายบนแอป</h3>
             <div class="flex bg-gray-200 p-1 rounded-xl mb-5 shadow-inner">
-              <button onclick="window.vibrate(15); window.reportMode='daily'; window.render();" class="flex-1 py-2.5 text-xs font-bold rounded-lg transition-all ${window.reportMode === 'daily' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 active:bg-gray-300'}">รายวัน</button>
-              <button onclick="window.vibrate(15); window.reportMode='monthly'; window.render();" class="flex-1 py-2.5 text-xs font-bold rounded-lg transition-all ${window.reportMode === 'monthly' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 active:bg-gray-300'}">รายเดือน</button>
-              <button onclick="window.vibrate(15); window.reportMode='yearly'; window.render();" class="flex-1 py-2.5 text-xs font-bold rounded-lg transition-all ${window.reportMode === 'yearly' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 active:bg-gray-300'}">รายปี</button>
-              <button onclick="window.vibrate(15); window.reportMode='custom'; window.render();" class="flex-1 py-2.5 text-xs font-bold rounded-lg transition-all ${window.reportMode === 'custom' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 active:bg-gray-300'}">กำหนดเอง</button>
+              <button onclick="window.vibrate(15); window.reportMode='daily'; window.render();" class="flex-1 py-2.5 text-xs font-bold rounded-lg transition-all active:scale-95 ${window.reportMode === 'daily' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 active:bg-gray-300'}">รายวัน</button>
+              <button onclick="window.vibrate(15); window.reportMode='monthly'; window.render();" class="flex-1 py-2.5 text-xs font-bold rounded-lg transition-all active:scale-95 ${window.reportMode === 'monthly' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 active:bg-gray-300'}">รายเดือน</button>
+              <button onclick="window.vibrate(15); window.reportMode='yearly'; window.render();" class="flex-1 py-2.5 text-xs font-bold rounded-lg transition-all active:scale-95 ${window.reportMode === 'yearly' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 active:bg-gray-300'}">รายปี</button>
+              <button onclick="window.vibrate(15); window.reportMode='custom'; window.render();" class="flex-1 py-2.5 text-xs font-bold rounded-lg transition-all active:scale-95 ${window.reportMode === 'custom' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 active:bg-gray-300'}">กำหนดเอง</button>
             </div>
 
             ${reportHtml}
