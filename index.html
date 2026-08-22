@@ -201,6 +201,13 @@
       }
     };
 
+    // ฟังก์ชันสำหรับเก็บแป้นพิมพ์อัตโนมัติ แก้บัคจอค้าง
+    window.hideKeyboard = function() {
+      if (document.activeElement && typeof document.activeElement.blur === 'function') {
+        document.activeElement.blur();
+      }
+    };
+
     onSnapshot(collection(db, "customers"), (snap) => { window.customers = snap.docs.map(d => ({ id: d.id, ...d.data() })); checkLoad('cust'); });
     onSnapshot(collection(db, "transactions"), (snap) => { window.transactions = snap.docs.map(d => ({ id: d.id, ...d.data() })); checkLoad('tx'); });
     onSnapshot(collection(db, "users"), (snap) => { 
@@ -331,6 +338,7 @@
     let confirmCallback = null;
     window.showModal = function(title, msg, confirmText, danger, onConfirm) {
       window.vibrate(50);
+      window.hideKeyboard(); // ดักจับให้แป้นพิมพ์พับลงก่อนกล่องข้อความเด้ง
       document.getElementById('modal-title').innerText = title;
       document.getElementById('modal-title').className = `font-bold text-xl mb-2 ${danger ? 'text-red-600' : 'text-gray-800'}`;
       document.getElementById('modal-msg').innerHTML = msg; 
@@ -360,6 +368,8 @@
 
     window.switchView = function(viewName, param = null) {
       window.vibrate(20);
+      window.hideKeyboard(); // เคลียร์แป้นพิมพ์เวลาสลับเมนู
+
       if(window.currentUser && !['admin', 'super_admin'].includes(window.currentUser.role) && ['reports', 'adminStock', 'stockList'].includes(viewName)) {
         return window.showToast('คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'error');
       }
@@ -399,6 +409,7 @@
       }
 
       window.render();
+      window.scrollTo(0, 0); // เลื่อนจอกลับไปบนสุดเสมอเวลาเปลี่ยนหน้า
     };
 
     window.logout = function() {
@@ -412,10 +423,11 @@
     window.loginUser = function(e) {
       e.preventDefault();
       window.vibrate(30);
+      window.hideKeyboard(); // ดักจับให้แป้นพิมพ์พับลงก่อนเปลี่ยนหน้า
+
       const userId = document.getElementById('login-user-select').value;
       const pin = document.getElementById('login-pin').value.trim();
       
-      // ✅ แก้บัคที่นี่: แจ้งเตือนทันทีถ้าไม่เลือกชื่อ หรือไม่ใส่รหัส
       if (!userId) {
         return window.showToast('กรุณาเลือกชื่อผู้ใช้งานด้วยครับ', 'error');
       }
@@ -428,7 +440,8 @@
           window.currentUser = SUPER_ADMIN_ACCOUNT;
           localStorage.setItem('water_app_user_id', SUPER_ADMIN_ACCOUNT.id);
           window.showToast('เข้าสู่ระบบสิทธิ์สูงสุดสำเร็จ');
-          window.switchView('list');
+          // หน่วงเวลา 50ms ให้มือถือเคลียร์การกดค้างบนคีย์บอร์ดก่อนลบจอทิ้ง แก้อาการหน้าค้าง
+          setTimeout(() => window.switchView('list'), 50); 
         } else {
           window.showToast('รหัส PIN ผู้ดูแลระบบสูงสุดไม่ถูกต้อง', 'error');
         }
@@ -440,7 +453,7 @@
         window.currentUser = user;
         localStorage.setItem('water_app_user_id', user.id);
         window.showToast(`ยินดีต้อนรับคุณ ${user.name}`);
-        window.switchView('list');
+        setTimeout(() => window.switchView('list'), 50); // แก้บัคจอกดแล้วค้าง
       } else {
         window.showToast('รหัส PIN ไม่ถูกต้อง', 'error');
       }
@@ -448,6 +461,7 @@
 
     window.savePromptPay = async function() {
       window.vibrate(30);
+      window.hideKeyboard();
       const pp = document.getElementById('promptpay-input').value.trim();
       try {
         await setDoc(doc(db, "system", "global_stock"), { promptpayNumber: pp }, { merge: true });
@@ -458,6 +472,7 @@
     window.saveStaff = async function(e) {
       e.preventDefault();
       window.vibrate(30);
+      window.hideKeyboard();
       if(!window.newUserName || !window.newUserPin) return window.showToast('กรุณากรอกข้อมูลให้ครบ', 'error');
       
       const submitBtn = e.target.querySelector('button[type="submit"]');
@@ -554,7 +569,7 @@
       window.vibrate(20);
       if(!['admin', 'super_admin'].includes(window.currentUser.role)) return;
       
-      // ✅ แก้บัค: ป้องกันมือลั่นกดลดสต๊อกจนติดลบ
+      // ดักจับป้องกันสต๊อกติดลบ
       if (delta < 0 && safeNum(window.globalStock[item]) <= 0) {
         return window.showToast('สต๊อกติดลบไม่ได้ครับ', 'error');
       }
@@ -629,6 +644,8 @@
     window.saveCustomer = async function(e, isEdit) {
       e.preventDefault();
       window.vibrate(30);
+      window.hideKeyboard(); // ดักจับให้แป้นพิมพ์พับลง
+
       const name = document.getElementById('form-name').value.trim();
       const phone = document.getElementById('form-phone').value.trim();
       const zone = document.getElementById('form-zone').value.trim() || 'อื่นๆ';
@@ -661,7 +678,9 @@
           window.showToast('เพิ่มลูกค้าใหม่เรียบร้อยแล้ว');
         }
         window.formName = ''; window.formPhone = ''; window.formZone = '';
-        window.selectedZone = zone; window.searchQuery = ''; window.switchView('list');
+        window.selectedZone = zone; window.searchQuery = ''; 
+        
+        setTimeout(() => window.switchView('list'), 50); // แก้บัคจอกดแล้วค้าง
       } catch (error) {
         window.showToast('เกิดข้อผิดพลาดในการบันทึก', 'error');
         submitBtn.innerText = 'บันทึกข้อมูล';
@@ -687,6 +706,8 @@
 
     window.submitDelivery = async function() {
       window.vibrate([30, 50, 30]);
+      window.hideKeyboard(); // ดักจับให้แป้นพิมพ์พับลง
+
       const cust = window.customers.find(c => c.id === window.selectedCustomerId);
       if (!cust) return window.showToast('ไม่พบข้อมูลลูกค้า', 'error');
 
@@ -902,7 +923,7 @@
             </div>
             <div class="mb-8">
               <label class="block text-gray-700 text-sm font-bold mb-2">รหัส PIN</label>
-              <input type="password" pattern="[0-9]*" inputmode="numeric" id="login-pin" class="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-3xl font-black tracking-[0.5em] text-center outline-none bg-gray-50 transition-all" placeholder="****" required />
+              <input type="password" pattern="[0-9]*" inputmode="numeric" id="login-pin" class="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-3xl font-black tracking-[0.5em] text-center outline-none bg-gray-50 transition-all" placeholder="****" />
             </div>
             <button type="submit" class="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-600/30 active:scale-95 transition-all text-lg">เข้าสู่ระบบ</button>
           </form>
@@ -1073,7 +1094,6 @@
         if (window.globalStock.promptpayNumber) {
           const payload = window.generatePromptPayPayload(window.globalStock.promptpayNumber, totalToCollect);
           if (payload) {
-            // ✅ แก้บัค: ดักจับตอนเน็ตหลุด ไม่ให้แอปค้างที่รูปโหลด QR
             qrHtml = `
               <div class="bg-white p-3 rounded-[2rem] shadow-sm border border-gray-200 mb-4 relative flex justify-center items-center w-56 h-56 mx-auto overflow-hidden">
                 <div id="qr-spinner" class="absolute inset-0 flex flex-col items-center justify-center bg-white rounded-[2rem] z-10">
@@ -1110,7 +1130,7 @@
       }
 
       container.innerHTML = `
-        <div class="pb-44 relative">
+        <div class="pb-44 relative page-transition">
           <div class="bg-white/85 backdrop-blur-xl px-4 py-3.5 shadow-sm sticky top-0 z-30 flex items-center justify-between border-b border-gray-100/50">
             <div class="flex items-center">
               <button onclick="window.switchView('list')" class="mr-3 p-2.5 bg-gray-50/80 rounded-full text-gray-700 active:scale-90 transition-all border border-gray-200"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
@@ -1267,8 +1287,8 @@
               ${window.paymentStatus === 'paid' && totalToCollect > 0 ? `
                 <div class="mt-5 pt-5 border-t border-gray-100">
                   <div class="flex gap-2 mb-4 bg-gray-50 p-1.5 rounded-xl border border-gray-100">
-                    <button onclick="window.vibrate(20); window.paymentMethod='cash'; window.render();" class="flex-1 py-2 text-xs font-black rounded-lg transition-all flex justify-center items-center ${window.paymentMethod === 'cash' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-400 active:bg-gray-200'}"><i data-lucide="banknote" class="w-4 h-4 mr-1"></i> เงินสด</button>
-                    <button onclick="window.vibrate(20); window.paymentMethod='qr'; window.render();" class="flex-1 py-2 text-xs font-black rounded-lg transition-all flex justify-center items-center ${window.paymentMethod === 'qr' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-400 active:bg-gray-200'}"><i data-lucide="qr-code" class="w-4 h-4 mr-1"></i> โอนผ่าน QR</button>
+                    <button onclick="window.vibrate(20); window.paymentMethod='cash'; window.render();" class="flex-1 py-2 text-xs font-black rounded-lg transition-all flex justify-center items-center active:scale-95 ${window.paymentMethod === 'cash' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-400 active:bg-gray-200'}"><i data-lucide="banknote" class="w-4 h-4 mr-1"></i> เงินสด</button>
+                    <button onclick="window.vibrate(20); window.paymentMethod='qr'; window.render();" class="flex-1 py-2 text-xs font-black rounded-lg transition-all flex justify-center items-center active:scale-95 ${window.paymentMethod === 'qr' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-400 active:bg-gray-200'}"><i data-lucide="qr-code" class="w-4 h-4 mr-1"></i> โอนผ่าน QR</button>
                   </div>
 
                   ${window.paymentMethod === 'cash' ? `
@@ -1286,12 +1306,12 @@
                       </div>
                     </div>
                     ${window.cashReceived !== '' ? `
-                      <div class="p-4 rounded-[1rem] text-center font-bold text-base shadow-inner ${changeAmount >= 0 ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}">
+                      <div class="p-4 rounded-[1rem] text-center font-bold text-base shadow-inner ${changeAmount >= 0 ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'} animate-fade-in">
                         ${changeAmount >= 0 ? `💵 ทอนเงินลูกค้า: <span class="text-3xl font-black text-emerald-600 ml-2 block mt-1">${changeAmount.toLocaleString()} ฿</span>` : `⚠️ เงินไม่พอ: ขาดอีก <span class="text-xl font-black text-red-600 ml-1">${Math.abs(changeAmount).toLocaleString()} ฿</span>`}
                       </div>
                     ` : ''}
                   ` : `
-                    <div class="flex flex-col items-center justify-center p-2 w-full">
+                    <div class="flex flex-col items-center justify-center p-2 w-full animate-fade-in">
                       ${qrHtml}
                     </div>
                   `}
