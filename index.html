@@ -2,24 +2,52 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>ระบบงาน โรงงานน้ำดื่ม แม่จว้า หมู่ 8</title>
   
-  <!-- ตั้งค่าแอปพลิเคชัน & ไอคอนหน้าจอมือถือ (PWA) แบบไม่ต้องใช้ไฟล์ภาพ -->
+  <!-- บังคับให้เป็นแอปพลิเคชันเต็มจอ -->
   <meta name="theme-color" content="#2563eb">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="ระบบน้ำดื่ม">
-  
-  <!-- รูปไอคอนสำหรับเบราว์เซอร์ และ Android -->
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%232563eb'/%3E%3Cpath d='M256 100 C256 100 128 280 128 360 A 128 128 0 0 0 384 360 C384 280 256 100 256 100 Z' fill='%23ffffff'/%3E%3Cpath d='M256 180 C256 180 160 300 160 360 A 96 96 0 0 0 352 360 C352 300 256 180 256 180 Z' fill='%23bfdbfe'/%3E%3C/svg%3E">
-  
-  <!-- รูปไอคอนสำหรับหน้าจอ iPhone/iPad -->
-  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' fill='%232563eb'/%3E%3Cpath d='M256 100 C256 100 128 280 128 360 A 128 128 0 0 0 384 360 C384 280 256 100 256 100 Z' fill='%23ffffff'/%3E%3Cpath d='M256 180 C256 180 160 300 160 360 A 96 96 0 0 0 352 360 C352 300 256 180 256 180 Z' fill='%23bfdbfe'/%3E%3C/svg%3E">
-  
-  <!-- สร้างไฟล์ Manifest เสมือน เพื่อให้ตั้งชื่อแอปตอนเซฟลงหน้าจอได้ -->
-  <link rel="manifest" href="data:application/manifest+json,{&quot;name&quot;:&quot;โรงงานน้ำดื่ม แม่จว้า หมู่ 8&quot;,&quot;short_name&quot;:&quot;ระบบน้ำดื่ม&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;#f3f4f6&quot;,&quot;theme_color&quot;:&quot;#2563eb&quot;,&quot;icons&quot;:[{&quot;src&quot;:&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%232563eb'/%3E%3Cpath d='M256 100 C256 100 128 280 128 360 A 128 128 0 0 0 384 360 C384 280 256 100 256 100 Z' fill='%23ffffff'/%3E%3Cpath d='M256 180 C256 180 160 300 160 360 A 96 96 0 0 0 352 360 C352 300 256 180 256 180 Z' fill='%23bfdbfe'/%3E%3C/svg%3E&quot;,&quot;sizes&quot;:&quot;512x512&quot;,&quot;type&quot;:&quot;image/svg+xml&quot;,&quot;purpose&quot;:&quot;any maskable&quot;}]}">
 
-  <title>ระบบงาน โรงงานน้ำดื่ม แม่จว้า หมู่ 8</title>
+  <script>
+    // สคริปต์วาดไอคอน PNG และสร้าง Manifest อัตโนมัติ (ไม่ต้องใช้ไฟล์ภาพนอก)
+    (function() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512; canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+      // พื้นหลังวงกลมสีฟ้า
+      ctx.fillStyle = '#2563eb';
+      ctx.beginPath(); ctx.arc(256, 256, 256, 0, Math.PI * 2); ctx.fill();
+      // รูปหยดน้ำสีขาว
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(256, 100);
+      ctx.bezierCurveTo(256, 100, 140, 280, 140, 360);
+      ctx.arc(256, 360, 116, Math.PI, 0, true);
+      ctx.fill();
+
+      const iconUrl = canvas.toDataURL('image/png');
+      const manifest = {
+        name: "โรงงานน้ำดื่ม แม่จว้า หมู่ 8",
+        short_name: "ระบบน้ำดื่ม",
+        start_url: window.location.pathname,
+        display: "standalone",
+        background_color: "#f3f4f6",
+        theme_color: "#2563eb",
+        icons: [{ src: iconUrl, sizes: "512x512", type: "image/png", purpose: "any maskable" }]
+      };
+
+      const blob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
+      const manifestUrl = URL.createObjectURL(blob);
+
+      let m = document.createElement('link'); m.rel = 'manifest'; m.href = manifestUrl; document.head.appendChild(m);
+      let a = document.createElement('link'); a.rel = 'apple-touch-icon'; a.href = iconUrl; document.head.appendChild(a);
+    })();
+  </script>
+
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   <style>
@@ -99,7 +127,6 @@
     window.searchQuery = '';
     window.selectedCustomerId = null;
 
-    // Report States
     window.reportMode = 'daily'; 
     const initD = new Date();
     const dStr = initD.getFullYear() + '-' + String(initD.getMonth()+1).padStart(2,'0') + '-' + String(initD.getDate()).padStart(2,'0');
@@ -108,11 +135,9 @@
     window.reportCustomStart = mStr;
     window.reportCustomEnd = dStr;
 
-    // Export State
     window.exportStartDate = mStr;
     window.exportEndDate = dStr;
 
-    // Delivery States
     window.deliveries = { orange: 0, purple: 0, crate: 0 };
     window.returns = { orange: 0, purple: 0, crate: 0 };
     window.ownTakeWash = 0; 
@@ -128,11 +153,9 @@
     window.paymentMethod = 'cash'; 
     window.txNote = '';
 
-    // Customer Form States
     window.formName = ''; window.formPhone = ''; window.formZone = '';
     window.formDebt = 0; window.formStockOrange = 0; window.formStockPurple = 0; window.formStockCrate = 0; window.formStockOwnBottle = 0;
 
-    // User Management
     window.editingUserId = null;
     window.newUserRole = 'staff'; window.newUserName = ''; window.newUserPin = '';
 
@@ -1512,15 +1535,15 @@
           </div>
           
           <div class="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 mb-6">
-            <h3 class="text-sm font-bold text-gray-800 mb-3 flex items-center"><i data-lucide="file-spreadsheet" class="w-4 h-4 mr-2 text-green-600"></i> โหลดข้อมูลเข้า Excel</h3>
+            <h3 class="text-sm font-bold text-gray-800 mb-3 flex items-center"><i data-lucide="calendar" class="w-4 h-4 mr-2 text-blue-500"></i> โหลดข้อมูลเข้า Excel</h3>
             <div class="grid grid-cols-2 gap-2 mb-3">
               <div>
                 <label class="text-[10px] font-bold text-gray-400 ml-1">ตั้งแต่วันที่</label>
-                <input type="date" id="export-start-date" value="${window.exportStartDate}" onchange="window.exportStartDate=this.value" class="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 focus:ring-2 focus:ring-green-500 bg-gray-50 outline-none" />
+                <input type="date" id="export-start-date" value="${window.exportStartDate}" onchange="window.exportStartDate=this.value" class="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 bg-gray-50 outline-none" />
               </div>
               <div>
                 <label class="text-[10px] font-bold text-gray-400 ml-1">ถึงวันที่</label>
-                <input type="date" id="export-end-date" value="${window.exportEndDate}" onchange="window.exportEndDate=this.value" class="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 focus:ring-2 focus:ring-green-500 bg-gray-50 outline-none" />
+                <input type="date" id="export-end-date" value="${window.exportEndDate}" onchange="window.exportEndDate=this.value" class="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 bg-gray-50 outline-none" />
               </div>
             </div>
             <button onclick="window.downloadExcelRange()" class="w-full bg-green-600 text-white py-2.5 rounded-xl text-sm font-bold shadow-sm active:scale-95 flex items-center justify-center transition-transform"><i data-lucide="download" class="w-4 h-4 mr-1.5"></i> ดาวน์โหลดช่วงเวลานี้</button>
