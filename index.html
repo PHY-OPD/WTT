@@ -414,7 +414,14 @@
       window.vibrate(30);
       const userId = document.getElementById('login-user-select').value;
       const pin = document.getElementById('login-pin').value.trim();
-      if (!userId || !pin) return;
+      
+      // ✅ แก้บัคที่นี่: แจ้งเตือนทันทีถ้าไม่เลือกชื่อ หรือไม่ใส่รหัส
+      if (!userId) {
+        return window.showToast('กรุณาเลือกชื่อผู้ใช้งานด้วยครับ', 'error');
+      }
+      if (!pin) {
+        return window.showToast('กรุณากรอกรหัส PIN', 'error');
+      }
 
       if (userId === SUPER_ADMIN_ACCOUNT.id) {
         if (pin === SUPER_ADMIN_ACCOUNT.pin) {
@@ -546,6 +553,12 @@
     window.updateGlobalStock = async function(item, delta) {
       window.vibrate(20);
       if(!['admin', 'super_admin'].includes(window.currentUser.role)) return;
+      
+      // ✅ แก้บัค: ป้องกันมือลั่นกดลดสต๊อกจนติดลบ
+      if (delta < 0 && safeNum(window.globalStock[item]) <= 0) {
+        return window.showToast('สต๊อกติดลบไม่ได้ครับ', 'error');
+      }
+      
       try { await setDoc(doc(db, "system", "global_stock"), { [item]: increment(delta) }, { merge: true }); } 
       catch(e) { window.showToast('อัปเดตสต๊อกไม่สำเร็จ', 'error'); }
     };
@@ -1060,13 +1073,18 @@
         if (window.globalStock.promptpayNumber) {
           const payload = window.generatePromptPayPayload(window.globalStock.promptpayNumber, totalToCollect);
           if (payload) {
+            // ✅ แก้บัค: ดักจับตอนเน็ตหลุด ไม่ให้แอปค้างที่รูปโหลด QR
             qrHtml = `
               <div class="bg-white p-3 rounded-[2rem] shadow-sm border border-gray-200 mb-4 relative flex justify-center items-center w-56 h-56 mx-auto overflow-hidden">
                 <div id="qr-spinner" class="absolute inset-0 flex flex-col items-center justify-center bg-white rounded-[2rem] z-10">
                   <div class="w-8 h-8 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin mb-3"></div>
                   <span class="text-[11px] text-blue-500 font-bold tracking-wider">กำลังโหลด QR...</span>
                 </div>
-                <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(payload)}" class="w-full h-full object-contain relative z-20 opacity-0 transition-opacity duration-500" alt="QR Code" onload="document.getElementById('qr-spinner').style.display='none'; this.classList.remove('opacity-0');" />
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(payload)}" 
+                     class="w-full h-full object-contain relative z-20 opacity-0 transition-opacity duration-500" 
+                     alt="QR Code" 
+                     onload="document.getElementById('qr-spinner').style.display='none'; this.classList.remove('opacity-0');" 
+                     onerror="const s = document.getElementById('qr-spinner'); if(s) { s.innerHTML='<i data-lucide=\\'wifi-off\\' class=\\'w-8 h-8 text-red-400 mb-2\\'></i><span class=\\'text-[11px] text-red-500 font-bold text-center\\'>ออฟไลน์<br>โหลดรูปไม่ได้</span>'; lucide.createIcons(); }" />
               </div>
               <p class="text-base font-black text-blue-800 bg-blue-50 px-6 py-2.5 rounded-full border border-blue-200 shadow-sm text-center mx-auto w-max">ยอดโอน: ${totalToCollect} บาท</p>
               <p class="text-[11px] text-red-500 font-bold mt-5 text-center bg-red-50 p-3 rounded-xl border border-red-100 leading-relaxed"><i data-lucide="alert-triangle" class="w-4 h-4 inline mr-1 mb-0.5"></i>พนักงานต้องตรวจสอบ "สลิปโอนเงิน" จากจอลูกค้า<br>ก่อนกดปุ่มบันทึกรายการทุกครั้ง</p>
@@ -1249,8 +1267,8 @@
               ${window.paymentStatus === 'paid' && totalToCollect > 0 ? `
                 <div class="mt-5 pt-5 border-t border-gray-100">
                   <div class="flex gap-2 mb-4 bg-gray-50 p-1.5 rounded-xl border border-gray-100">
-                    <button onclick="window.vibrate(20); window.paymentMethod='cash'; window.render();" class="flex-1 py-2 text-xs font-black rounded-lg transition-all active:scale-95 flex justify-center items-center ${window.paymentMethod === 'cash' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-400 active:bg-gray-200'}"><i data-lucide="banknote" class="w-4 h-4 mr-1"></i> เงินสด</button>
-                    <button onclick="window.vibrate(20); window.paymentMethod='qr'; window.render();" class="flex-1 py-2 text-xs font-black rounded-lg transition-all active:scale-95 flex justify-center items-center ${window.paymentMethod === 'qr' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-400 active:bg-gray-200'}"><i data-lucide="qr-code" class="w-4 h-4 mr-1"></i> โอนผ่าน QR</button>
+                    <button onclick="window.vibrate(20); window.paymentMethod='cash'; window.render();" class="flex-1 py-2 text-xs font-black rounded-lg transition-all flex justify-center items-center ${window.paymentMethod === 'cash' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-400 active:bg-gray-200'}"><i data-lucide="banknote" class="w-4 h-4 mr-1"></i> เงินสด</button>
+                    <button onclick="window.vibrate(20); window.paymentMethod='qr'; window.render();" class="flex-1 py-2 text-xs font-black rounded-lg transition-all flex justify-center items-center ${window.paymentMethod === 'qr' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-400 active:bg-gray-200'}"><i data-lucide="qr-code" class="w-4 h-4 mr-1"></i> โอนผ่าน QR</button>
                   </div>
 
                   ${window.paymentMethod === 'cash' ? `
