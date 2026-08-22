@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-title" content="ระบบน้ำดื่ม">
 
   <script>
-    // สคริปต์วาดไอคอน PNG และสร้าง Manifest อัตโนมัติ (ไร้ขอบดำ)
+    // สคริปต์วาดไอคอน PNG และสร้าง Manifest อัตโนมัติ
     (function() {
       const canvas = document.createElement('canvas');
       canvas.width = 512; canvas.height = 512;
@@ -79,8 +79,8 @@
 </head>
 <body class="bg-gray-100 font-sans text-gray-900 min-h-screen relative pb-20 selection:bg-blue-200">
 
-  <!-- หน้าจอโหลดเข้าแอปครั้งแรก -->
-  <div id="loading-screen" class="fixed inset-0 bg-blue-600 z-[70] flex flex-col items-center justify-center transition-all duration-700 ease-in-out opacity-100 scale-100">
+  <!-- หน้าจอโหลดเข้าแอปแบบแอนิเมชัน -->
+  <div id="loading-screen" class="fixed inset-0 bg-blue-600 z-[70] flex flex-col items-center justify-center transition-all duration-500 ease-in-out opacity-100 scale-100">
     <div class="relative flex items-center justify-center mb-8 -mt-10">
       <div class="absolute w-28 h-28 bg-white/20 rounded-full animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite]"></div>
       <div class="absolute w-36 h-36 bg-white/10 rounded-full animate-[ping_2.5s_cubic-bezier(0,0,0.2,1)_infinite]" style="animation-delay: 0.5s"></div>
@@ -94,7 +94,7 @@
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
       </svg>
-      กำลังโหลดข้อมูล...
+      <span id="loading-text">กำลังซิงค์ข้อมูล...</span>
     </div>
   </div>
 
@@ -197,7 +197,7 @@
       if (navigator.vibrate) navigator.vibrate(pattern);
     };
 
-    // ฟังก์ชันสั่งซ่อนคีย์บอร์ดมือถืออัตโนมัติ (แก้บัคหน้าจอค้าง)
+    // ฟังก์ชันสั่งซ่อนคีย์บอร์ดมือถืออัตโนมัติ
     window.hideKeyboard = function() {
       if (document.activeElement && typeof document.activeElement.blur === 'function') {
         document.activeElement.blur();
@@ -230,9 +230,8 @@
             loader.style.transform = 'scale(1.05)';
             setTimeout(() => {
               loader.classList.add('hidden');
-              document.getElementById('bottom-nav').classList.remove('hidden');
-            }, 700);
-          }, 800);
+            }, 500);
+          }, 400); // ดึงหน้าโหลดออกเร็วขึ้น
         }
         if (!isAppInitialized) {
           isAppInitialized = true;
@@ -243,11 +242,20 @@
       }
     }
 
+    function checkWelcomeToast() {
+      const welcomeName = sessionStorage.getItem('show_welcome_toast');
+      if (welcomeName) {
+        setTimeout(() => window.showToast(`เข้าสู่ระบบสำเร็จ: ${welcomeName}`), 600);
+        sessionStorage.removeItem('show_welcome_toast');
+      }
+    }
+
     function initializeAppFlow() {
       const savedUserId = localStorage.getItem('water_app_user_id');
       if (savedUserId === SUPER_ADMIN_ACCOUNT.id) {
         window.currentUser = SUPER_ADMIN_ACCOUNT;
         window.switchView('list');
+        checkWelcomeToast();
         return;
       }
       if (savedUserId) {
@@ -255,6 +263,7 @@
         if (user) {
           window.currentUser = user;
           window.switchView('list');
+          checkWelcomeToast();
           return;
         }
       }
@@ -405,18 +414,29 @@
       }
 
       window.render();
-      window.scrollTo(0, 0); 
+      window.scrollTo(0, 0); // รีเซ็ตตำแหน่งจอให้อยู่บนสุดเสมอ
     };
 
+    // ✅ ฟังก์ชันออกจากระบบแบบ Hard Reload เคลียร์แอป 100%
     window.logout = function() {
       window.vibrate(50);
       localStorage.removeItem('water_app_user_id');
-      window.currentUser = null;
-      window.switchView('login');
-      window.showToast('ออกจากระบบแล้ว');
+      sessionStorage.removeItem('show_welcome_toast');
+      
+      const loader = document.getElementById('loading-screen');
+      const loaderText = document.getElementById('loading-text');
+      if (loaderText) loaderText.innerText = 'กำลังออกจากระบบ...';
+      loader.classList.remove('hidden');
+      void loader.offsetWidth;
+      loader.style.opacity = '1';
+      loader.style.transform = 'scale(1)';
+      
+      setTimeout(() => {
+        window.location.reload();
+      }, 300);
     };
 
-    // ✅ ฟังก์ชัน Login ฉบับแก้ไข: ไม่เด้ง ไม่ค้าง
+    // ✅ ฟังก์ชัน Login ฉบับสมบูรณ์ (The Ultimate Fix): ใช้ Hard Reload แก้ปัญหาหน้าจอค้าง
     window.loginUser = function() {
       window.vibrate(30);
       window.hideKeyboard(); // บังคับพับแป้นพิมพ์ทันที
@@ -428,7 +448,6 @@
       if (!userId) return window.showToast('กรุณาเลือกชื่อผู้ใช้งานด้วยครับ', 'error');
       if (!pin) return window.showToast('กรุณากรอกรหัส PIN', 'error');
 
-      // เปลี่ยนปุ่มเป็นสถานะโหลด
       const submitBtn = document.getElementById('btn-login');
       let originalText = 'เข้าสู่ระบบ';
       if(submitBtn) {
@@ -437,34 +456,46 @@
         submitBtn.disabled = true;
       }
 
-      // หน่วงเวลา 400ms ให้แป้นพิมพ์พับลงสุดก่อนเคลียร์หน้าจอ (แก้อาการหน้าจอค้าง)
+      // โชว์หน้าต่างโหลดแบบเต็มจอ บังจังหวะที่จอมือถือจะกระตุก
+      const loader = document.getElementById('loading-screen');
+      const loaderText = document.getElementById('loading-text');
+      if (loaderText) loaderText.innerText = 'กำลังตรวจสอบข้อมูล...';
+      loader.classList.remove('hidden');
+      void loader.offsetWidth;
+      loader.style.opacity = '1';
+      loader.style.transform = 'scale(1)';
+
+      // หน่วงเวลาให้แป้นพิมพ์พับลงสุด แล้วสั่ง Reload ทันที!
       setTimeout(() => {
         if (userId === SUPER_ADMIN_ACCOUNT.id) {
           if (pin === SUPER_ADMIN_ACCOUNT.pin) {
-            window.currentUser = SUPER_ADMIN_ACCOUNT;
             localStorage.setItem('water_app_user_id', SUPER_ADMIN_ACCOUNT.id);
-            window.showToast('เข้าสู่ระบบสิทธิ์สูงสุดสำเร็จ');
-            window.switchView('list');
+            sessionStorage.setItem('show_welcome_toast', SUPER_ADMIN_ACCOUNT.name);
+            window.location.reload(); // <--- จุดสำคัญ: ล้างแคชแล้วเข้าหน้าหลัก
+            return;
           } else {
+            loader.style.opacity = '0';
+            setTimeout(() => loader.classList.add('hidden'), 300);
             window.showToast('รหัส PIN ผู้ดูแลระบบสูงสุดไม่ถูกต้อง', 'error');
             if(pinInput) pinInput.value = '';
             if(submitBtn) { submitBtn.innerText = originalText; submitBtn.disabled = false; }
+            return;
           }
-          return;
         }
 
         const user = window.users.find(u => u.id === userId);
         if (user && user.pin === pin) {
-          window.currentUser = user;
           localStorage.setItem('water_app_user_id', user.id);
-          window.showToast(`ยินดีต้อนรับคุณ ${user.name}`);
-          window.switchView('list');
+          sessionStorage.setItem('show_welcome_toast', user.name);
+          window.location.reload(); // <--- จุดสำคัญ: ล้างแคชแล้วเข้าหน้าหลัก
         } else {
+          loader.style.opacity = '0';
+          setTimeout(() => loader.classList.add('hidden'), 300);
           window.showToast('รหัส PIN ไม่ถูกต้อง', 'error');
           if(pinInput) pinInput.value = '';
           if(submitBtn) { submitBtn.innerText = originalText; submitBtn.disabled = false; }
         }
-      }, 400); 
+      }, 300); 
     };
 
     window.savePromptPay = async function() {
@@ -504,7 +535,7 @@
           window.showToast('เกิดข้อผิดพลาด', 'error'); 
           if(submitBtn) { submitBtn.innerText = originalText; submitBtn.disabled = false; }
         }
-      }, 400);
+      }, 300);
     };
 
     window.editStaff = function(id) {
@@ -678,27 +709,38 @@
         updateData.stockOwnBottle = Math.max(0, safeNum(window.formStockOwnBottle));
       }
 
-      // หน่วงเวลาเคลียร์จอแก้ค้าง
+      // โชว์หน้าต่างโหลดแบบเต็มจอ บังจังหวะที่จอมือถือจะกระตุก
+      const loader = document.getElementById('loading-screen');
+      const loaderText = document.getElementById('loading-text');
+      if (loaderText) loaderText.innerText = 'กำลังบันทึกข้อมูล...';
+      loader.classList.remove('hidden');
+      void loader.offsetWidth;
+      loader.style.opacity = '1';
+      loader.style.transform = 'scale(1)';
+
       setTimeout(async () => {
         try {
           if (isEdit) {
             await updateDoc(doc(db, "customers", window.selectedCustomerId), updateData);
-            window.showToast('อัปเดตข้อมูลลูกค้าเรียบร้อยแล้ว');
+            sessionStorage.setItem('show_welcome_toast', 'อัปเดตข้อมูลลูกค้าเรียบร้อยแล้ว');
           } else {
             await addDoc(collection(db, "customers"), { 
               name, phone, zone, 
               debt: 0, stockOrange: 0, stockPurple: 0, stockCrate: 0, stockOwnBottle: 0 
             });
-            window.showToast('เพิ่มลูกค้าใหม่เรียบร้อยแล้ว');
+            sessionStorage.setItem('show_welcome_toast', 'เพิ่มลูกค้าใหม่เรียบร้อยแล้ว');
           }
           window.formName = ''; window.formPhone = ''; window.formZone = '';
           window.selectedZone = zone; window.searchQuery = ''; 
-          window.switchView('list');
+          
+          window.location.reload(); // ใช้ Hard Reload แก้อาการค้าง
         } catch (error) {
+          loader.style.opacity = '0';
+          setTimeout(() => loader.classList.add('hidden'), 300);
           window.showToast('เกิดข้อผิดพลาดในการบันทึก', 'error');
           if(submitBtn) { submitBtn.innerText = 'บันทึกข้อมูล'; submitBtn.disabled = false; }
         }
-      }, 400);
+      }, 300);
     };
 
     window.goToDelivery = function(custId) {
@@ -758,6 +800,15 @@
         btn.disabled = true;
       }
 
+      // โชว์หน้าต่างโหลดแบบเต็มจอ บังจังหวะที่จอมือถือจะกระตุก
+      const loader = document.getElementById('loading-screen');
+      const loaderText = document.getElementById('loading-text');
+      if (loaderText) loaderText.innerText = 'กำลังบันทึกข้อมูล...';
+      loader.classList.remove('hidden');
+      void loader.offsetWidth;
+      loader.style.opacity = '1';
+      loader.style.transform = 'scale(1)';
+
       setTimeout(async () => {
         try {
           const batch = writeBatch(db);
@@ -783,13 +834,16 @@
           }, { merge: true });
 
           await batch.commit();
-          window.showToast(`บันทึกการส่งให้ ${cust.name} เรียบร้อย!`);
-          window.switchView('list');
+          
+          sessionStorage.setItem('show_welcome_toast', `บันทึกการส่งให้ ${cust.name} เรียบร้อย!`);
+          window.location.reload(); // ใช้ Hard Reload แก้อาการค้าง
         } catch (error) {
+          loader.style.opacity = '0';
+          setTimeout(() => loader.classList.add('hidden'), 300);
           window.showToast('บันทึกไม่สำเร็จ ตรวจสอบสัญญาณอินเทอร์เน็ต', 'error');
           if(btn) { btn.innerText = 'บันทึกรายการ'; btn.disabled = false; }
         }
-      }, 400); // หน่วงเวลาให้คีย์บอร์ดพับจบสมบูรณ์ก่อนบันทึก
+      }, 300); 
     };
 
     window.voidTransaction = function(txId) {
@@ -929,7 +983,6 @@
             <div class="bg-blue-100 text-blue-600 w-24 h-24 rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-sm"><i data-lucide="droplet" class="w-12 h-12"></i></div>
             <h1 class="text-2xl font-black text-blue-900 leading-tight">ระบบงาน<br/>โรงงานน้ำดื่ม แม่จว้า หมู่ 8</h1>
           </div>
-          <!-- ถอดแท็ก Form ทิ้ง เพื่อแก้บัคชนกับแป้นพิมพ์ -->
           <div class="bg-white p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-50">
             <div class="mb-4">
               <label class="block text-gray-700 text-sm font-bold mb-2">เลือกผู้ใช้งาน</label>
@@ -941,7 +994,6 @@
             </div>
             <div class="mb-8">
               <label class="block text-gray-700 text-sm font-bold mb-2">รหัส PIN</label>
-              <!-- ดักการกด Enter ให้เรียกใช้ปุ่มเข้าสู่ระบบตรงๆ -->
               <input type="password" pattern="[0-9]*" inputmode="numeric" id="login-pin" onkeypress="if(event.key === 'Enter') { window.loginUser(); return false; }" class="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-3xl font-black tracking-[0.5em] text-center outline-none bg-gray-50 transition-all" placeholder="****" />
             </div>
             <button type="button" id="btn-login" onclick="window.loginUser()" class="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-600/30 active:scale-95 transition-all text-lg flex justify-center items-center">เข้าสู่ระบบ</button>
@@ -991,7 +1043,7 @@
 
             <div class="space-y-3">
               ${filtered.length === 0 ? `<div class="text-center py-12 bg-white rounded-3xl border border-gray-100 shadow-sm"><i data-lucide="users" class="w-12 h-12 mx-auto text-gray-200 mb-3"></i><p class="text-gray-400 font-bold text-sm">ไม่มีรายชื่อลูกค้าในหมวดนี้</p></div>` : filtered.map(cust => `
-                <div onclick="window.goToDelivery('${cust.id}')" class="bg-white p-4 rounded-2xl shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-gray-100 flex justify-between items-center active:scale-[0.97] transition-all cursor-pointer relative overflow-hidden">
+                <div onclick="window.goToDelivery('${cust.id}')" class="bg-white p-4 rounded-2xl shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-gray-100 flex justify-between items-center active:scale-95 transition-all cursor-pointer relative overflow-hidden">
                   ${safeNum(cust.debt) > 0 ? `<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-red-500"></div>` : ''}
                   <div class="pl-2 w-full">
                     <h3 class="font-black text-base text-gray-800 flex items-center">${cust.name}</h3>
@@ -1033,7 +1085,7 @@
             ${isEdit && ['admin', 'super_admin'].includes(window.currentUser.role) ? `<button onclick="window.deleteCustomer()" class="p-2.5 bg-red-50 text-red-600 rounded-full active:scale-90 transition-all shadow-sm border border-red-100"><i data-lucide="trash-2" class="w-5 h-5"></i></button>` : ''}
           </div>
 
-          <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+          <form class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
             <div class="mb-4">
               <label class="block text-gray-700 text-[13px] font-bold mb-2">ชื่อลูกค้า <span class="text-red-500">*</span></label>
               <input type="text" id="form-name" value="${window.formName}" oninput="window.formName=this.value" class="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 text-base font-bold bg-gray-50 focus:bg-white outline-none transition-all" required placeholder="เช่น ป้าศรี ซอย 1" />
@@ -1088,7 +1140,7 @@
             ` : ''}
 
             <button type="button" id="btn-save-customer" onclick="window.saveCustomer(${isEdit})" class="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-600/30 mt-6 active:scale-95 flex justify-center items-center text-lg transition-all">บันทึกข้อมูล</button>
-          </div>
+          </form>
         </div>
       `;
     }
@@ -1854,7 +1906,7 @@
             <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
               <h3 class="font-black text-gray-800 mb-4 flex items-center text-base"><i data-lucide="users" class="w-5 h-5 mr-2 text-indigo-600"></i> จัดการพนักงาน</h3>
               
-              <div class="mb-5 bg-indigo-50 p-4 rounded-2xl border ${window.editingUserId ? 'border-indigo-400 shadow-md' : 'border-indigo-100'} transition-all">
+              <form onsubmit="window.saveStaff(event)" class="mb-5 bg-indigo-50 p-4 rounded-2xl border ${window.editingUserId ? 'border-indigo-400 shadow-md' : 'border-indigo-100'} transition-all">
                 <div class="flex justify-between items-center mb-3">
                   <h4 class="text-xs font-black text-indigo-800">${window.editingUserId ? 'แก้ไขข้อมูลพนักงาน' : 'เพิ่มพนักงานใหม่'}</h4>
                   ${window.editingUserId ? `<button type="button" onclick="window.cancelEditStaff()" class="text-[10px] text-red-600 font-bold bg-white px-2.5 py-1 rounded-lg active:scale-90 transition-all border border-red-100 shadow-sm">ยกเลิกแก้ไข</button>` : ''}
@@ -1868,9 +1920,9 @@
                     <option value="staff" ${window.newUserRole==='staff'?'selected':''}>พนักงาน (Staff)</option>
                     <option value="admin" ${window.newUserRole==='admin'?'selected':''}>แอดมิน (Admin)</option>
                   </select>
-                  <button type="button" id="btn-save-staff" onclick="window.saveStaff()" class="bg-indigo-600 text-white px-5 py-3 rounded-xl font-black text-sm shadow-md shadow-indigo-600/30 active:scale-95 w-24 flex justify-center items-center transition-all">${window.editingUserId ? 'บันทึก' : 'เพิ่ม'}</button>
+                  <button type="submit" class="bg-indigo-600 text-white px-5 py-3 rounded-xl font-black text-sm shadow-md shadow-indigo-600/30 active:scale-95 w-24 flex justify-center items-center transition-all">${window.editingUserId ? 'บันทึก' : 'เพิ่ม'}</button>
                 </div>
-              </div>
+              </form>
 
               <div class="space-y-2">
                 <div class="flex justify-between items-center py-3 px-4 bg-red-50 rounded-2xl border border-red-100">
